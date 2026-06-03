@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Button';
-import { Clock, Monitor } from 'lucide-react';
+import { Brain, Clock, GraduationCap, Handshake, Leaf, MessageCircle, Monitor, Users } from 'lucide-react';
 import { fetchTrainingCategories, fetchTrainings, Training, TrainingCategory } from '../lib/trainingData';
 
 interface TrainingsListPageProps {
   onNavigate: (page: string, data?: any) => void;
 }
+
+const trainingIconMap = {
+  brain: Brain,
+  users: Users,
+  school: GraduationCap,
+  leaf: Leaf,
+  message: MessageCircle,
+  handshake: Handshake
+};
 
 export function TrainingsListPage({ onNavigate }: TrainingsListPageProps) {
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -122,13 +131,18 @@ export function TrainingsListPage({ onNavigate }: TrainingsListPageProps) {
 
             {!loading && !error && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {filteredTrainings.map((training) => (
-                  <div
-                    key={training.id}
-                    className="bg-card rounded-xl shadow-sm border border-border overflow-hidden hover:shadow-md transition-shadow"
-                  >
-                    <div className="bg-gradient-to-br from-primary/10 to-secondary/10 h-32 flex items-center justify-center text-6xl">
-                      {training.image}
+                {filteredTrainings.map((training) => {
+                  const TrainingIcon = trainingIconMap[training.image_icon as keyof typeof trainingIconMap] ?? GraduationCap;
+
+                  return (
+                    <div
+                      key={training.id}
+                      className="bg-card rounded-xl shadow-sm border border-border overflow-hidden hover:shadow-md transition-shadow"
+                    >
+                    <div className="bg-gradient-to-br from-primary/5 to-secondary/5 h-32 flex items-center justify-center">
+                      <div className="h-16 w-16 rounded-full border border-primary/15 bg-white/80 flex items-center justify-center shadow-sm">
+                        <TrainingIcon className="h-8 w-8 text-primary" strokeWidth={1.6} />
+                      </div>
                     </div>
                     <div className="p-6">
                       <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-xs rounded-full mb-3">
@@ -157,7 +171,8 @@ export function TrainingsListPage({ onNavigate }: TrainingsListPageProps) {
                       </Button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
