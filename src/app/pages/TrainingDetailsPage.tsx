@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../components/Button';
 import { Clock, Users, Monitor, CheckCircle, Star } from 'lucide-react';
-import { fetchTrainingDetails, Training, TrainingDetails } from '../lib/trainingData';
+import { fetchTrainingBySlug, fetchTrainingDetails, Training, TrainingDetails } from '../lib/trainingData';
+import { trackWebsiteVisit } from '../lib/analytics';
 
 interface TrainingDetailsPageProps {
-  training: Training;
+  training: Partial<Training> & { slug?: string };
   onNavigate: (page: string, data?: any) => void;
 }
 
@@ -16,7 +17,12 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
   useEffect(() => {
     let mounted = true;
 
-    fetchTrainingDetails(training.id)
+    const loadDetails = async () => {
+      const baseTraining = training.id ? training as Training : await fetchTrainingBySlug(training.slug ?? '');
+      return fetchTrainingDetails(baseTraining.id);
+    };
+
+    loadDetails()
       .then((data) => {
         if (mounted) setDetails(data);
       })
@@ -30,9 +36,23 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
     return () => {
       mounted = false;
     };
-  }, [training.id]);
+  }, [training.id, training.slug]);
 
   const currentTraining = details ?? training;
+
+  useEffect(() => {
+    if (!details) return;
+
+    document.title = `${details.title} | VYSPER INSTITUTE`;
+    document.querySelector('meta[name="description"]')?.setAttribute('content', details.description);
+    document.querySelector('link[rel="canonical"]')?.setAttribute('href', `${window.location.origin}/trainings/${details.slug}`);
+
+    void trackWebsiteVisit({
+      pageKey: 'training-details',
+      pageTitle: details.title,
+      trainingId: details.id
+    });
+  }, [details]);
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -43,11 +63,11 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
               Trainings
             </button>
             <span>/</span>
-            <span className="text-primary">{currentTraining.title}</span>
+            <span className="text-primary">{currentTraining.title ?? 'Training Details'}</span>
           </div>
-          <h1 className="mb-4 text-primary">{currentTraining.title}</h1>
+          <h1 className="mb-4 text-primary">{currentTraining.title ?? 'Training Details'}</h1>
           <p className="text-xl text-foreground/80 max-w-3xl">
-            {currentTraining.description}
+            {currentTraining.description ?? 'Loading training information...'}
           </p>
         </div>
       </div>
@@ -191,7 +211,7 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
                   <div className="bg-muted rounded-lg p-4">
                     <p className="text-sm text-foreground/60 mb-1">Starting from</p>
                     <p className="text-3xl text-primary" style={{ fontWeight: 700 }}>
-                      PHP {currentTraining.base_price.toLocaleString()}
+                      PHP {currentTraining.base_price?.toLocaleString()}
                     </p>
                   <p className="text-xs text-foreground/60 mt-1">Base quotation for standard package</p>
                   </div>

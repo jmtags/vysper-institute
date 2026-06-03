@@ -13,20 +13,24 @@ interface NavbarProps {
 export function Navbar({ onNavigate, currentPage, onLogin, onSignUp, onLogout }: NavbarProps) {
   const { profile, user, signOut } = useAuth();
   const menuItems = [
-    { label: 'Trainings', page: 'trainings' },
-    { label: 'Online Courses', page: 'courses' },
-    { label: 'Digital Products', page: 'digital-products' },
-    { label: 'Physical Products', page: 'physical-products' },
-    { label: 'About', page: 'about' },
-    { label: 'Contact', page: 'contact' }
+    { label: 'Trainings', page: 'trainings', href: '/trainings' },
+    { label: 'Online Courses', page: 'courses', href: '/online-courses' },
+    { label: 'Digital Products', page: 'digital-products', href: '/digital-products' },
+    { label: 'Physical Products', page: 'physical-products', href: '/physical-products' },
+    { label: 'About', page: 'about', href: '/about' },
+    { label: 'Contact', page: 'contact', href: '/contact' }
   ];
 
   return (
     <nav className="bg-white border-b border-border sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex items-center justify-between h-16">
-          <button
-            onClick={() => onNavigate('home')}
+          <a
+            href="/"
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate('home');
+            }}
             className="flex items-center gap-3 text-left"
             aria-label={`${BRAND_NAME} home`}
           >
@@ -37,13 +41,17 @@ export function Navbar({ onNavigate, currentPage, onLogin, onSignUp, onLogout }:
               </span>
               <span className="mt-1 text-[11px] text-secondary">{BRAND_TAGLINE}</span>
             </span>
-          </button>
+          </a>
 
           <div className="hidden md:flex items-center gap-8">
             {menuItems.map((item) => (
-              <button
+              <a
                 key={item.page}
-                onClick={() => onNavigate(item.page)}
+                href={item.href}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate(item.page);
+                }}
                 className={`transition-colors ${
                   currentPage === item.page
                     ? 'text-primary'
@@ -51,19 +59,23 @@ export function Navbar({ onNavigate, currentPage, onLogin, onSignUp, onLogout }:
                 }`}
               >
                 {item.label}
-              </button>
+              </a>
             ))}
           </div>
 
           <div className="hidden md:flex items-center gap-3">
             {user ? (
               <>
-                <button
-                  onClick={() => onNavigate('dashboard')}
+                <a
+                  href="/dashboard"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    onNavigate('dashboard');
+                  }}
                   className="px-4 py-2 text-primary hover:bg-muted rounded-lg transition-colors"
                 >
                   {profile?.role === 'admin' ? 'Admin' : 'Dashboard'}
-                </button>
+                </a>
                 <button
                   onClick={async () => {
                     await signOut();

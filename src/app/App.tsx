@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { AuthProvider } from './auth/AuthContext';
@@ -12,6 +12,58 @@ import { CoursePlayerPage } from './pages/CoursePlayerPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { submitContactMessage } from './lib/contactMessages';
 import { BRAND_NAME } from './branding';
+import { trackWebsiteVisit } from './lib/analytics';
+
+const publicRoutes: Record<string, string> = {
+  home: '/',
+  trainings: '/trainings',
+  courses: '/online-courses',
+  'digital-products': '/digital-products',
+  'physical-products': '/physical-products',
+  about: '/about',
+  contact: '/contact',
+  dashboard: '/dashboard'
+};
+
+function getRouteForPage(page: string, data?: any) {
+  if (page === 'training-details' && data?.slug) return `/trainings/${data.slug}`;
+  return publicRoutes[page] ?? '/';
+}
+
+function getPageFromPath(pathname: string) {
+  const normalizedPath = pathname.replace(/\/$/, '') || '/';
+  if (normalizedPath === '/') return { page: 'home', data: null };
+  if (normalizedPath === '/trainings') return { page: 'trainings', data: null };
+  if (normalizedPath.startsWith('/trainings/')) {
+    return { page: 'training-details', data: { slug: normalizedPath.replace('/trainings/', '') } };
+  }
+  if (normalizedPath === '/online-courses') return { page: 'courses', data: null };
+  if (normalizedPath === '/digital-products') return { page: 'digital-products', data: null };
+  if (normalizedPath === '/physical-products') return { page: 'physical-products', data: null };
+  if (normalizedPath === '/about') return { page: 'about', data: null };
+  if (normalizedPath === '/contact') return { page: 'contact', data: null };
+  if (normalizedPath === '/dashboard') return { page: 'dashboard', data: null };
+  return { page: 'home', data: null };
+}
+
+function getPageMeta(page: string, data?: any) {
+  const title = data?.title ? `${data.title} | ${BRAND_NAME}` : `${BRAND_NAME} | Learning, Wellness, Transformation`;
+  const descriptions: Record<string, string> = {
+    home: `${BRAND_NAME} provides learning, wellness, and transformation programs for organizations, schools, and professionals.`,
+    trainings: 'Browse VYSPER Institute corporate training programs for mental health, workplace development, and school-based wellness.',
+    courses: 'Online courses from VYSPER Institute are coming soon.',
+    'digital-products': 'Digital resources and professional toolkits from VYSPER Institute are coming soon.',
+    'physical-products': 'Training kits, books, and assessment tools from VYSPER Institute are coming soon.',
+    about: `Learn about ${BRAND_NAME}, a provider of evidence-based training and organizational development programs.`,
+    contact: `Contact ${BRAND_NAME} for training quotations, partnerships, and program inquiries.`,
+    dashboard: `${BRAND_NAME} dashboard`
+  };
+
+  return {
+    title,
+    description: data?.description ?? descriptions[page] ?? descriptions.home
+  };
+}
 
 function ComingSoonPage({ title }: { title: string }) {
   return (
@@ -106,15 +158,51 @@ function ContactPage() {
 }
 
 function AppContent() {
-  const [currentPage, setCurrentPage] = useState('home');
-  const [pageData, setPageData] = useState<any>(null);
+  const initialRoute = useMemo(() => getPageFromPath(window.location.pathname), []);
+  const [currentPage, setCurrentPage] = useState(initialRoute.page);
+  const [pageData, setPageData] = useState<any>(initialRoute.data);
   const [authMode, setAuthMode] = useState<'login' | 'signup' | null>(null);
 
-  const handleNavigation = (page: string, data?: any) => {
+  const handleNavigation = (page: string, data?: any, replace = false) => {
     setCurrentPage(page);
     setPageData(data);
+    const nextPath = getRouteForPage(page, data);
+    if (window.location.pathname !== nextPath) {
+      const historyMethod = replace ? 'replaceState' : 'pushState';
+      window.history[historyMethod]({ page, data }, '', nextPath);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = getPageFromPath(window.location.pathname);
+      setCurrentPage(route.page);
+      setPageData(route.data);
+      window.scrollTo({ top: 0 });
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    const meta = getPageMeta(currentPage, pageData);
+    document.title = meta.title;
+
+    const description = document.querySelector('meta[name="description"]');
+    description?.setAttribute('content', meta.description);
+
+    const canonical = document.querySelector('link[rel="canonical"]');
+    canonical?.setAttribute('href', `${window.location.origin}${getRouteForPage(currentPage, pageData)}`);
+
+    if (currentPage !== 'training-details') {
+      void trackWebsiteVisit({
+        pageKey: currentPage,
+        pageTitle: pageData?.title ?? meta.title
+      });
+    }
+  }, [currentPage, pageData]);
 
   const renderPage = () => {
     switch (currentPage) {

@@ -1,8 +1,9 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Button';
-import { FileText, GraduationCap, Mail, Shield, User, Users, Settings } from 'lucide-react';
+import { BarChart3, FileText, GraduationCap, Mail, Shield, User, Users, Settings } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { ContactMessage, ContactMessageStatus, fetchContactMessages, updateContactMessageStatus } from '../lib/contactMessages';
+import { AnalyticsVisit, fetchWebsiteVisits } from '../lib/analytics';
 import {
   fetchProfiles,
   fetchTrainingCategories,
@@ -31,7 +32,7 @@ interface DashboardPageProps {
   onNavigate: (page: string, data?: any) => void;
 }
 
-type AdminTab = 'proposals' | 'messages' | 'users' | 'trainings' | 'speakers';
+type AdminTab = 'proposals' | 'messages' | 'users' | 'trainings' | 'speakers' | 'analytics';
 
 const emptyTrainingForm = {
   id: '',
@@ -69,6 +70,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [proposals, setProposals] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [messages, setMessages] = useState<ContactMessage[]>([]);
+  const [analyticsVisits, setAnalyticsVisits] = useState<AnalyticsVisit[]>([]);
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [categories, setCategories] = useState<TrainingCategory[]>([]);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
@@ -104,12 +106,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       setSpeakers(speakerData);
 
       if (isAdmin) {
-        const [profileData, messageData] = await Promise.all([
+        const [profileData, messageData, visitData] = await Promise.all([
           fetchProfiles(),
-          fetchContactMessages()
+          fetchContactMessages(),
+          fetchWebsiteVisits()
         ]);
         setProfiles(profileData);
         setMessages(messageData);
+        setAnalyticsVisits(visitData);
       }
     } catch (err: any) {
       setError(err.message ?? 'Unable to load dashboard data.');
@@ -127,6 +131,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     if (activeTab === 'users') return 'User Management';
     if (activeTab === 'trainings') return 'Training Management';
     if (activeTab === 'speakers') return 'Speaker Management';
+    if (activeTab === 'analytics') return 'Website Analytics';
     if (activeTab === 'messages') return 'Contact Messages';
     return 'Quotation Requests';
   }, [activeTab, isAdmin]);
@@ -496,6 +501,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   <AdminNavButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<Users className="w-4 h-4" />} label="Users" />
                   <AdminNavButton active={activeTab === 'trainings'} onClick={() => setActiveTab('trainings')} icon={<Settings className="w-4 h-4" />} label="Trainings" />
                   <AdminNavButton active={activeTab === 'speakers'} onClick={() => setActiveTab('speakers')} icon={<GraduationCap className="w-4 h-4" />} label="Speakers" />
+                  <AdminNavButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} icon={<BarChart3 className="w-4 h-4" />} label="Analytics" />
                 </nav>
               ) : (
                 <Button variant="outline" className="w-full" onClick={() => onNavigate('trainings')}>
@@ -536,6 +542,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
               {!loading && !error && isAdmin && activeTab === 'messages' && (
                 <MessagesPanel messages={messages} saving={saving} onStatusChange={handleMessageStatusChange} />
+              )}
+
+              {!loading && !error && isAdmin && activeTab === 'analytics' && (
+                <AnalyticsPanel visits={analyticsVisits} />
               )}
 
               {!loading && !error && isAdmin && activeTab === 'trainings' && (
@@ -940,6 +950,108 @@ function MessagesPanel({ messages, saving, onStatusChange }: {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function AnalyticsPanel({ visits }: { visits: AnalyticsVisit[] }) {
+  const today = new Date().toDateString();
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const visitsToday = visits.filter((visit) => new Date(visit.created_at).toDateString() === today).length;
+  const visitsThisWeek = visits.filter((visit) => new Date(visit.created_at) >= sevenDaysAgo).length;
+  const uniqueVisitors = new Set(visits.map((visit) => visit.visitor_id).filter(Boolean)).size;
+
+  const pageTotals = Object.values(visits.reduce<Record<string, { title: string; count: number }>>((totals, visit) => {
+    const key = visit.page_key;
+    totals[key] = totals[key] ?? { title: visit.page_title, count: 0 };
+    totals[key].count += 1;
+    return totals;
+  }, {})).sort((a, b) => b.count - a.count);
+
+  const trainingTotals = Object.values(visits
+    .filter((visit) => visit.training_id)
+    .reduce<Record<string, { title: string; count: number }>>((totals, visit) => {
+      const key = visit.training_id as string;
+      totals[key] = totals[key] ?? { title: visit.training?.title ?? visit.page_title, count: 0 };
+      totals[key].count += 1;
+      return totals;
+    }, {}))
+    .sort((a, b) => b.count - a.count);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <AnalyticsStat label="Total Visits" value={visits.length} />
+        <AnalyticsStat label="Today" value={visitsToday} />
+        <AnalyticsStat label="Last 7 Days" value={visitsThisWeek} />
+        <AnalyticsStat label="Unique Visitors" value={uniqueVisitors} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <AnalyticsList title="Popular Pages" rows={pageTotals} emptyText="No page visits yet." />
+        <AnalyticsList title="Most Viewed Trainings" rows={trainingTotals} emptyText="No training views yet." />
+      </div>
+
+      <div>
+        <h3 className="mb-4 text-primary">Recent Visits</h3>
+        <div className="space-y-3">
+          {visits.slice(0, 12).map((visit) => (
+            <div key={visit.id} className="flex flex-col md:flex-row md:items-center justify-between gap-2 bg-muted rounded-lg p-4">
+              <div>
+                <p style={{ fontWeight: 600 }}>{visit.training?.title ?? visit.page_title}</p>
+                <p className="text-sm text-foreground/60">
+                  {visit.page_key.replace('-', ' ')}
+                  {visit.referrer && ` / From ${visit.referrer}`}
+                </p>
+              </div>
+              <p className="text-sm text-foreground/60">{new Date(visit.created_at).toLocaleString()}</p>
+            </div>
+          ))}
+
+          {visits.length === 0 && (
+            <div className="bg-muted rounded-lg p-6 text-center">
+              <p className="text-foreground/60">No analytics data yet. Visits will appear after the SQL patch is run and visitors browse the website.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnalyticsStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-muted rounded-lg p-4">
+      <p className="text-sm text-foreground/60">{label}</p>
+      <p className="text-3xl text-primary mt-1" style={{ fontWeight: 700 }}>{value}</p>
+    </div>
+  );
+}
+
+function AnalyticsList({ title, rows, emptyText }: {
+  title: string;
+  rows: Array<{ title: string; count: number }>;
+  emptyText: string;
+}) {
+  return (
+    <div>
+      <h3 className="mb-4 text-primary">{title}</h3>
+      <div className="space-y-3">
+        {rows.slice(0, 8).map((row) => (
+          <div key={row.title} className="flex items-center justify-between gap-4 bg-muted rounded-lg p-4">
+            <p className="text-foreground/80">{row.title}</p>
+            <p className="text-primary" style={{ fontWeight: 700 }}>{row.count}</p>
+          </div>
+        ))}
+
+        {rows.length === 0 && (
+          <div className="bg-muted rounded-lg p-6 text-center">
+            <p className="text-foreground/60">{emptyText}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

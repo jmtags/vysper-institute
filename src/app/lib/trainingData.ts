@@ -108,6 +108,18 @@ export async function fetchTrainings(includeInactive = false) {
   return (data ?? []).map(mapTraining);
 }
 
+export async function fetchTrainingBySlug(slug: string) {
+  const { data, error } = await supabase
+    .from('trainings')
+    .select('*, category:training_categories(id, name, slug)')
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .single();
+
+  if (error) throw error;
+  return mapTraining(data);
+}
+
 export async function fetchTrainingDetails(trainingId: string) {
   const { data, error } = await supabase
     .from('trainings')
