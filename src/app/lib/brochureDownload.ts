@@ -1,126 +1,246 @@
-import { BRAND_EMAIL, BRAND_NAME, BRAND_TAGLINE } from '../branding';
+import type { jsPDF as JsPDF } from 'jspdf';
+import { BRAND_EMAIL, BRAND_HERO_IMAGE, BRAND_LOGO, BRAND_NAME, BRAND_TAGLINE } from '../branding';
 import { TrainingDetails } from './trainingData';
 
-function cleanText(value: string) {
-  return value
-    .normalize('NFKD')
-    .replace(/[^\x20-\x7E]/g, '')
-    .replace(/[\\()]/g, '\\$&');
+const colors = {
+  navy: '#08294a',
+  teal: '#147c73',
+  green: '#5fb765',
+  pale: '#eef8f5',
+  softBlue: '#eaf3f8',
+  text: '#1d2939',
+  muted: '#667085',
+  border: '#d9e7e4',
+  white: '#ffffff'
+};
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'vysper-training';
 }
 
-function wrapText(text: string, maxLength = 86) {
-  const words = cleanText(text).split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let currentLine = '';
+async function imageToDataUrl(src: string) {
+  const response = await fetch(src);
+  const blob = await response.blob();
 
-  words.forEach((word) => {
-    const nextLine = currentLine ? `${currentLine} ${word}` : word;
-    if (nextLine.length > maxLength) {
-      if (currentLine) lines.push(currentLine);
-      currentLine = word;
-    } else {
-      currentLine = nextLine;
-    }
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function addWrappedText(
+  pdf: JsPDF,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  options: { size?: number; color?: string; lineHeight?: number; fontStyle?: 'normal' | 'bold' } = {}
+) {
+  pdf.setFont('helvetica', options.fontStyle ?? 'normal');
+  pdf.setFontSize(options.size ?? 10);
+  pdf.setTextColor(options.color ?? colors.text);
+
+  const lines = pdf.splitTextToSize(text || '', maxWidth);
+  pdf.text(lines, x, y);
+  return y + lines.length * (options.lineHeight ?? 5);
+}
+
+function addSectionTitle(pdf: JsPDF, title: string, x: number, y: number) {
+  pdf.setFillColor(colors.teal);
+  pdf.roundedRect(x, y - 5, 2.5, 9, 1, 1, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(13);
+  pdf.setTextColor(colors.navy);
+  pdf.text(title, x + 6, y);
+  return y + 8;
+}
+
+function addPageFooter(pdf: JsPDF, pageNumber: number) {
+  pdf.setDrawColor(colors.border);
+  pdf.line(18, 282, 192, 282);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(8);
+  pdf.setTextColor(colors.muted);
+  pdf.text(`${BRAND_NAME} | ${BRAND_EMAIL}`, 18, 288);
+  pdf.text(String(pageNumber), 190, 288, { align: 'right' });
+}
+
+function addNewPage(pdf: JsPDF) {
+  pdf.addPage();
+  addPageFooter(pdf, pdf.getNumberOfPages());
+  return 24;
+}
+
+function ensureSpace(pdf: JsPDF, y: number, needed = 32) {
+  if (y + needed > 276) return addNewPage(pdf);
+  return y;
+}
+
+export async function downloadTrainingBrochure(training: TrainingDetails) {
+  const { jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+
+  const [logoUrl, heroUrl] = await Promise.all([
+    imageToDataUrl(BRAND_LOGO).catch(() => ''),
+    imageToDataUrl(BRAND_HERO_IMAGE).catch(() => '')
+  ]);
+
+  pdf.setFillColor(colors.pale);
+  pdf.rect(0, 0, pageWidth, 297, 'F');
+  pdf.setFillColor(colors.navy);
+  pdf.rect(0, 0, pageWidth, 86, 'F');
+  pdf.setFillColor(colors.teal);
+  pdf.rect(0, 84, pageWidth, 6, 'F');
+  pdf.setFillColor(colors.green);
+  pdf.rect(0, 90, pageWidth, 4, 'F');
+
+  if (heroUrl) {
+    pdf.addImage(heroUrl, 'PNG', 118, 18, 74, 48, undefined, 'FAST');
+  }
+
+  if (logoUrl) {
+    pdf.setFillColor(colors.white);
+    pdf.roundedRect(18, 18, 24, 24, 4, 4, 'F');
+    pdf.addImage(logoUrl, 'PNG', 21, 21, 18, 18, undefined, 'FAST');
+  }
+
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(11);
+  pdf.setTextColor(colors.white);
+  pdf.text(BRAND_NAME, 48, 25);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(8);
+  pdf.text(BRAND_TAGLINE, 48, 31);
+
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(24);
+  pdf.text(pdf.splitTextToSize(training.title, 96), 18, 54);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(10);
+  pdf.setTextColor('#d9f0ef');
+  pdf.text(pdf.splitTextToSize(training.description, 96), 18, 72);
+
+  pdf.setFillColor(colors.white);
+  pdf.roundedRect(18, 108, 174, 34, 5, 5, 'F');
+  const statItems = [
+    ['Duration', training.duration],
+    ['Delivery Mode', training.mode],
+    ['Group Size', `${training.min_participants}-${training.max_participants}`],
+    ['Base Package', `PHP ${training.base_price.toLocaleString()}`]
+  ];
+
+  statItems.forEach(([label, value], index) => {
+    const x = 26 + index * 42;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+    pdf.setTextColor(colors.muted);
+    pdf.text(label, x, 121);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(10);
+    pdf.setTextColor(colors.navy);
+    pdf.text(pdf.splitTextToSize(value, 36), x, 129);
   });
 
-  if (currentLine) lines.push(currentLine);
-  return lines;
-}
+  let y = 158;
+  y = addSectionTitle(pdf, 'Program Overview', 18, y);
+  y = addWrappedText(pdf, training.overview, 18, y, 174, { size: 10.5, lineHeight: 5.4 });
 
-function buildPdf(lines: Array<{ text: string; size?: number; gap?: number }>) {
-  const pages: string[][] = [];
-  let currentPage: string[] = [];
-  let y = 780;
+  y += 10;
+  y = ensureSpace(pdf, y, 56);
+  y = addSectionTitle(pdf, 'Learning Objectives', 18, y);
+  training.objectives.forEach((objective) => {
+    y = ensureSpace(pdf, y, 12);
+    pdf.setFillColor(colors.green);
+    pdf.circle(21, y - 1.5, 1.6, 'F');
+    y = addWrappedText(pdf, objective, 27, y, 164, { size: 9.5, lineHeight: 5 }) + 1.5;
+  });
 
-  lines.forEach((line) => {
-    const size = line.size ?? 11;
-    const gap = line.gap ?? 16;
-    const wrapped = wrapText(line.text, size >= 18 ? 48 : 86);
+  y += 6;
+  y = ensureSpace(pdf, y, 64);
+  y = addSectionTitle(pdf, 'Training Outline', 18, y);
+  training.outline.forEach((item, index) => {
+    y = ensureSpace(pdf, y, 14);
+    pdf.setFillColor(colors.softBlue);
+    pdf.roundedRect(18, y - 6, 8, 8, 2, 2, 'F');
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8);
+    pdf.setTextColor(colors.navy);
+    pdf.text(String(index + 1), 22, y - 0.5, { align: 'center' });
+    y = addWrappedText(pdf, item, 31, y, 160, { size: 9.5, lineHeight: 5 }) + 1.5;
+  });
 
-    wrapped.forEach((text, index) => {
-      if (y < 56) {
-        pages.push(currentPage);
-        currentPage = [];
-        y = 780;
+  y += 6;
+  y = ensureSpace(pdf, y, 48);
+  y = addSectionTitle(pdf, 'Target Participants', 18, y);
+  y = addWrappedText(pdf, training.target_participants || 'Participants will be aligned based on the final quotation request.', 18, y, 174, {
+    size: 10,
+    lineHeight: 5.2
+  });
+
+  y += 8;
+  if (training.speakers.length > 0) {
+    y = ensureSpace(pdf, y, 54);
+    y = addSectionTitle(pdf, training.speakers.length > 1 ? 'Keynote Speakers' : 'Keynote Speaker', 18, y);
+
+    for (const speaker of training.speakers) {
+      y = ensureSpace(pdf, y, 38);
+      pdf.setFillColor(colors.white);
+      pdf.roundedRect(18, y - 6, 174, 34, 5, 5, 'F');
+
+      if (speaker.profile_image_url) {
+        const speakerImage = await imageToDataUrl(speaker.profile_image_url).catch(() => '');
+        if (speakerImage) {
+          pdf.addImage(speakerImage, 'JPEG', 24, y - 1, 22, 22, undefined, 'FAST');
+        }
       }
 
-      currentPage.push(`BT /F1 ${size} Tf 50 ${y} Td (${text}) Tj ET`);
-      y -= index === wrapped.length - 1 ? gap : size + 4;
-    });
-  });
+      if (!speaker.profile_image_url) {
+        pdf.setFillColor(colors.softBlue);
+        pdf.roundedRect(24, y - 1, 22, 22, 4, 4, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.setTextColor(colors.navy);
+        pdf.text(
+          speaker.full_name.split(' ').map((part) => part[0]).join('').slice(0, 2),
+          35,
+          y + 12,
+          { align: 'center' }
+        );
+      }
 
-  if (currentPage.length) pages.push(currentPage);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.setTextColor(colors.navy);
+      pdf.text(speaker.full_name, 54, y + 2);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(colors.teal);
+      pdf.text([speaker.title, speaker.specialty].filter(Boolean).join(' / '), 54, y + 8);
+      addWrappedText(pdf, speaker.bio_notes || 'Bionotes will be available soon.', 54, y + 15, 132, {
+        size: 8.5,
+        color: colors.text,
+        lineHeight: 4.3
+      });
+      y += 40;
+    }
+  }
 
-  const objects: string[] = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
-  ];
+  y = ensureSpace(pdf, y + 4, 36);
+  pdf.setFillColor(colors.navy);
+  pdf.roundedRect(18, y, 174, 30, 5, 5, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(12);
+  pdf.setTextColor(colors.white);
+  pdf.text('Ready to request a quotation?', 26, y + 11);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(9);
+  pdf.setTextColor('#d9f0ef');
+  pdf.text(`Contact ${BRAND_EMAIL} or use the website quotation form.`, 26, y + 20);
 
-  const pageRefs: string[] = [];
-  pages.forEach((pageLines) => {
-    const pageObjectNumber = objects.length + 1;
-    const contentObjectNumber = objects.length + 2;
-    pageRefs.push(`${pageObjectNumber} 0 R`);
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObjectNumber} 0 R >>`);
-    const stream = pageLines.join('\n');
-    objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
-  });
+  addPageFooter(pdf, 1);
 
-  objects[1] = `<< /Type /Pages /Kids [${pageRefs.join(' ')}] /Count ${pageRefs.length} >>`;
-
-  let pdf = '%PDF-1.4\n';
-  const offsets: number[] = [];
-  objects.forEach((object, index) => {
-    offsets.push(pdf.length);
-    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-
-  const xrefOffset = pdf.length;
-  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  offsets.forEach((offset) => {
-    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
-  });
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-
-  return pdf;
-}
-
-export function downloadTrainingBrochure(training: TrainingDetails) {
-  const lines: Array<{ text: string; size?: number; gap?: number }> = [
-    { text: BRAND_NAME, size: 22, gap: 24 },
-    { text: BRAND_TAGLINE, size: 12, gap: 26 },
-    { text: training.title, size: 18, gap: 24 },
-    { text: training.description, size: 12, gap: 20 },
-    { text: 'Program Overview', size: 15, gap: 20 },
-    { text: training.overview, gap: 20 },
-    { text: 'Training Details', size: 15, gap: 20 },
-    { text: `Duration: ${training.duration}` },
-    { text: `Delivery Mode: ${training.mode}` },
-    { text: `Group Size: ${training.min_participants}-${training.max_participants} participants` },
-    { text: `Base Package: PHP ${training.base_price.toLocaleString()}`, gap: 22 },
-    { text: 'Learning Objectives', size: 15, gap: 20 },
-    ...training.objectives.map((objective) => ({ text: `- ${objective}` })),
-    { text: 'Training Outline', size: 15, gap: 20 },
-    ...training.outline.map((item, index) => ({ text: `${index + 1}. ${item}` })),
-    { text: 'Keynote Speaker/s', size: 15, gap: 20 },
-    ...(training.speakers.length
-      ? training.speakers.map((speaker) => ({
-          text: `${speaker.full_name}${speaker.specialty ? ` - ${speaker.specialty}` : ''}${speaker.bio_notes ? `: ${speaker.bio_notes}` : ''}`
-        }))
-      : [{ text: 'Speaker details will be confirmed with the final quotation.' }]),
-    { text: 'Contact', size: 15, gap: 20 },
-    { text: `For quotation requests and partnerships, email ${BRAND_EMAIL}.` }
-  ];
-
-  const pdf = buildPdf(lines);
-  const blob = new Blob([pdf], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${training.slug || 'vysper-training'}-brochure.pdf`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  pdf.save(`${slugify(training.slug || training.title)}-brochure.pdf`);
 }

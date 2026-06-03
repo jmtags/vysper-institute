@@ -236,7 +236,9 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
                   size="md"
                   className="w-full"
                   disabled={!details}
-                  onClick={() => details && downloadTrainingBrochure(details)}
+                  onClick={() => {
+                    if (details) void downloadTrainingBrochure(details);
+                  }}
                 >
                   Download Brochure
                 </Button>
