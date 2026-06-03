@@ -1,16 +1,21 @@
-import { BRAND_NAME, BRAND_TAGLINE, BRAND_TRAINING_CENTER } from '../branding';
+import type { jsPDF as JsPDF } from 'jspdf';
+import { BRAND_EMAIL, BRAND_LOGO, BRAND_NAME, BRAND_TAGLINE, BRAND_TRAINING_CENTER } from '../branding';
 
-function escapeHtml(value: any) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
+const colors = {
+  navy: '#08294a',
+  teal: '#147c73',
+  green: '#5fb765',
+  pale: '#eef8f5',
+  softBlue: '#eaf3f8',
+  text: '#1d2939',
+  muted: '#667085',
+  border: '#d9e7e4',
+  white: '#ffffff'
+};
 
-export function downloadProposal(data: {
+export interface ProposalDownloadData {
   proposalNumber: string;
+  status?: string;
   trainingTitle: string;
   organizationName?: string;
   contactPerson?: string;
@@ -24,81 +29,250 @@ export function downloadProposal(data: {
   basePrice: number;
   totalPrice: number;
   addOns: Array<{ name: string; quantity: number; totalPrice: number }>;
-}) {
-  const addOnsHtml = data.addOns.length
-    ? data.addOns.map((addOn) => `
-      <tr>
-        <td>${escapeHtml(addOn.name)} (${escapeHtml(addOn.quantity)}x)</td>
-        <td>PHP ${Number(addOn.totalPrice).toLocaleString()}</td>
-      </tr>
-    `).join('')
-    : '<tr><td>No paid add-ons selected</td><td>PHP 0</td></tr>';
+  adminNotes?: string;
+  declineReason?: string;
+}
 
-  const html = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>${escapeHtml(data.proposalNumber)} - Training Quotation</title>
-    <style>
-      body { font-family: Arial, sans-serif; color: #10233f; margin: 40px; line-height: 1.5; }
-      header { border-bottom: 3px solid #0d9488; padding-bottom: 18px; margin-bottom: 28px; }
-      h1, h2 { color: #0b2a4a; margin: 0 0 8px; }
-      .muted { color: #5f6b7a; }
-      table { width: 100%; border-collapse: collapse; margin: 14px 0 28px; }
-      td, th { border: 1px solid #d8dee8; padding: 10px; text-align: left; }
-      th { background: #eef7f6; }
-      .total { font-size: 22px; font-weight: 700; color: #0b2a4a; }
-      .section { margin-bottom: 28px; }
-    </style>
-  </head>
-  <body>
-    <header>
-      <h1>${BRAND_NAME}</h1>
-      <p class="muted">${BRAND_TAGLINE}</p>
-      <p><strong>Quotation ID:</strong> ${escapeHtml(data.proposalNumber)}</p>
-    </header>
+async function imageToDataUrl(src: string) {
+  const response = await fetch(src);
+  const blob = await response.blob();
 
-    <section class="section">
-      <h2>Client Information</h2>
-      <table>
-        <tr><th>Organization</th><td>${escapeHtml(data.organizationName || 'Not provided')}</td></tr>
-        <tr><th>Contact Person</th><td>${escapeHtml(data.contactPerson || 'Not provided')}</td></tr>
-        <tr><th>Email</th><td>${escapeHtml(data.contactEmail || 'Not provided')}</td></tr>
-        <tr><th>Phone</th><td>${escapeHtml(data.contactPhone || 'Not provided')}</td></tr>
-      </table>
-    </section>
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
-    <section class="section">
-      <h2>Training Details</h2>
-      <table>
-        <tr><th>Program</th><td>${escapeHtml(data.trainingTitle)}</td></tr>
-        <tr><th>Participants</th><td>${escapeHtml(data.participants)}</td></tr>
-        <tr><th>Duration</th><td>${escapeHtml(data.duration)}</td></tr>
-        <tr><th>Delivery Mode</th><td>${escapeHtml(data.deliveryMode)}</td></tr>
-        <tr><th>Venue</th><td>${escapeHtml(data.venue === 'client-site' ? 'Client Site' : BRAND_TRAINING_CENTER)}</td></tr>
-        <tr><th>Preferred Date</th><td>${escapeHtml(data.preferredDate || 'To be confirmed')}</td></tr>
-      </table>
-    </section>
+function filename(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'training-quotation';
+}
 
-    <section class="section">
-      <h2>Cost Breakdown</h2>
-      <table>
-        <tr><th>Item</th><th>Amount</th></tr>
-        <tr><td>Base Training Fee</td><td>PHP ${Number(data.basePrice).toLocaleString()}</td></tr>
-        ${addOnsHtml}
-      </table>
-      <p class="total">Total Investment: PHP ${Number(data.totalPrice).toLocaleString()}</p>
-    </section>
-  </body>
-</html>`;
+function money(value: number) {
+  return `PHP ${Number(value || 0).toLocaleString()}`;
+}
 
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${data.proposalNumber || 'training-quotation'}.html`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+function displayStatus(status?: string) {
+  if (status === 'accepted') return 'Approved';
+  if (status === 'submitted') return 'Pending Review';
+  if (status === 'declined') return 'Declined';
+  if (status === 'archived') return 'Archived';
+  return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Quotation Request';
+}
+
+function addWrappedText(
+  pdf: JsPDF,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  options: { size?: number; color?: string; lineHeight?: number; fontStyle?: 'normal' | 'bold' } = {}
+) {
+  pdf.setFont('helvetica', options.fontStyle ?? 'normal');
+  pdf.setFontSize(options.size ?? 10);
+  pdf.setTextColor(options.color ?? colors.text);
+
+  const lines = pdf.splitTextToSize(String(text || ''), maxWidth);
+  pdf.text(lines, x, y);
+  return y + lines.length * (options.lineHeight ?? 5);
+}
+
+function addSectionTitle(pdf: JsPDF, title: string, x: number, y: number) {
+  pdf.setFillColor(colors.teal);
+  pdf.roundedRect(x, y - 5, 2.5, 9, 1, 1, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(13);
+  pdf.setTextColor(colors.navy);
+  pdf.text(title, x + 6, y);
+  return y + 8;
+}
+
+function addFooter(pdf: JsPDF, pageNumber: number) {
+  pdf.setDrawColor(colors.border);
+  pdf.line(18, 282, 192, 282);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(8);
+  pdf.setTextColor(colors.muted);
+  pdf.text(`${BRAND_NAME} | ${BRAND_EMAIL}`, 18, 288);
+  pdf.text(String(pageNumber), 190, 288, { align: 'right' });
+}
+
+function addNewPage(pdf: JsPDF) {
+  pdf.addPage();
+  addFooter(pdf, pdf.getNumberOfPages());
+  return 24;
+}
+
+function ensureSpace(pdf: JsPDF, y: number, needed = 32) {
+  if (y + needed > 276) return addNewPage(pdf);
+  return y;
+}
+
+function addInfoRow(pdf: JsPDF, label: string, value: string, x: number, y: number, width = 84) {
+  pdf.setFillColor(colors.white);
+  pdf.roundedRect(x, y, width, 15, 3, 3, 'F');
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(colors.muted);
+  pdf.text(label, x + 4, y + 5);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(9.5);
+  pdf.setTextColor(colors.navy);
+  pdf.text(pdf.splitTextToSize(value || 'Not provided', width - 8), x + 4, y + 11);
+}
+
+export async function downloadProposal(data: ProposalDownloadData) {
+  const { jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const logoUrl = await imageToDataUrl(BRAND_LOGO).catch(() => '');
+
+  pdf.setFillColor(colors.pale);
+  pdf.rect(0, 0, pageWidth, 297, 'F');
+  pdf.setFillColor(colors.navy);
+  pdf.rect(0, 0, pageWidth, 58, 'F');
+  pdf.setFillColor(colors.teal);
+  pdf.rect(0, 56, pageWidth, 4, 'F');
+  pdf.setFillColor(colors.green);
+  pdf.rect(0, 60, pageWidth, 3, 'F');
+
+  if (logoUrl) {
+    pdf.setFillColor(colors.white);
+    pdf.roundedRect(18, 12, 20, 20, 4, 4, 'F');
+    pdf.addImage(logoUrl, 'PNG', 20.5, 14.5, 15, 15, undefined, 'FAST');
+  }
+
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(11);
+  pdf.setTextColor(colors.white);
+  pdf.text(BRAND_NAME, 44, 19);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(8);
+  pdf.text(BRAND_TAGLINE, 44, 25);
+
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(20);
+  pdf.text('Training Quotation', 18, 45);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(9);
+  pdf.setTextColor('#d9f0ef');
+  pdf.text(`Quotation ID: ${data.proposalNumber}`, 118, 20);
+  pdf.text(`Status: ${displayStatus(data.status)}`, 118, 27);
+  pdf.text(`Generated: ${new Date().toLocaleDateString()}`, 118, 34);
+
+  pdf.setFillColor(colors.white);
+  pdf.roundedRect(18, 76, 174, 34, 5, 5, 'F');
+  const stats = [
+    ['Program', data.trainingTitle],
+    ['Participants', String(data.participants)],
+    ['Delivery', data.deliveryMode],
+    ['Investment', money(data.totalPrice)]
+  ];
+  stats.forEach(([label, value], index) => {
+    const x = 26 + index * 42;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+    pdf.setTextColor(colors.muted);
+    pdf.text(label, x, 89);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(index === 0 ? 8.5 : 10);
+    pdf.setTextColor(colors.navy);
+    pdf.text(pdf.splitTextToSize(value, 36), x, 97);
+  });
+
+  let y = 128;
+  y = addSectionTitle(pdf, 'Client Information', 18, y);
+  addInfoRow(pdf, 'Organization', data.organizationName || 'Not provided', 18, y, 84);
+  addInfoRow(pdf, 'Contact Person', data.contactPerson || 'Not provided', 108, y, 84);
+  y += 19;
+  addInfoRow(pdf, 'Email', data.contactEmail || 'Not provided', 18, y, 84);
+  addInfoRow(pdf, 'Phone', data.contactPhone || 'Not provided', 108, y, 84);
+
+  y += 32;
+  y = addSectionTitle(pdf, 'Training Details', 18, y);
+  addInfoRow(pdf, 'Program', data.trainingTitle, 18, y, 174);
+  y += 19;
+  addInfoRow(pdf, 'Duration', data.duration, 18, y, 54);
+  addInfoRow(pdf, 'Delivery Mode', data.deliveryMode, 78, y, 54);
+  addInfoRow(pdf, 'Venue', data.venue === 'client-site' ? 'Client Site' : BRAND_TRAINING_CENTER, 138, y, 54);
+  y += 19;
+  addInfoRow(pdf, 'Preferred Date', data.preferredDate || 'To be confirmed', 18, y, 84);
+  addInfoRow(pdf, 'Participants', String(data.participants), 108, y, 84);
+
+  y += 32;
+  y = ensureSpace(pdf, y, 64);
+  y = addSectionTitle(pdf, 'Cost Breakdown', 18, y);
+  pdf.setFillColor(colors.white);
+  pdf.roundedRect(18, y - 3, 174, 10, 3, 3, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(9);
+  pdf.setTextColor(colors.navy);
+  pdf.text('Item', 24, y + 3);
+  pdf.text('Amount', 184, y + 3, { align: 'right' });
+  y += 12;
+
+  const costRows = [
+    { name: 'Base Training Fee', quantity: 1, amount: data.basePrice },
+    ...data.addOns.map((addOn) => ({ name: addOn.name, quantity: addOn.quantity, amount: addOn.totalPrice }))
+  ];
+
+  if (data.addOns.length === 0) {
+    costRows.push({ name: 'Paid Add-ons', quantity: 0, amount: 0 });
+  }
+
+  costRows.forEach((row) => {
+    y = ensureSpace(pdf, y, 14);
+    pdf.setFillColor(colors.white);
+    pdf.roundedRect(18, y - 5, 174, 10, 2, 2, 'F');
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.setTextColor(colors.text);
+    pdf.text(`${row.name}${row.quantity > 1 ? ` (${row.quantity}x)` : ''}`, 24, y + 1);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(colors.navy);
+    pdf.text(money(row.amount), 184, y + 1, { align: 'right' });
+    y += 12;
+  });
+
+  y += 4;
+  y = ensureSpace(pdf, y, 28);
+  pdf.setFillColor(colors.navy);
+  pdf.roundedRect(18, y, 174, 24, 5, 5, 'F');
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(9);
+  pdf.setTextColor('#d9f0ef');
+  pdf.text('Total Investment', 26, y + 9);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(18);
+  pdf.setTextColor(colors.white);
+  pdf.text(money(data.totalPrice), 184, y + 16, { align: 'right' });
+  y += 34;
+
+  if (data.adminNotes || data.declineReason) {
+    y = ensureSpace(pdf, y, 34);
+    y = addSectionTitle(pdf, data.declineReason ? 'Quotation Notes' : 'Admin Notes', 18, y);
+    if (data.declineReason) {
+      y = addWrappedText(pdf, `Decline reason: ${data.declineReason}`, 18, y, 174, { size: 9.5, lineHeight: 5.2 });
+      y += 4;
+    }
+    if (data.adminNotes) {
+      y = addWrappedText(pdf, data.adminNotes, 18, y, 174, { size: 9.5, lineHeight: 5.2 });
+    }
+  }
+
+  y = ensureSpace(pdf, y + 6, 28);
+  pdf.setFillColor(colors.softBlue);
+  pdf.roundedRect(18, y, 174, 24, 5, 5, 'F');
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(11);
+  pdf.setTextColor(colors.navy);
+  pdf.text('Next Step', 26, y + 9);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(8.8);
+  pdf.setTextColor(colors.text);
+  pdf.text(`For confirmation or adjustments, contact ${BRAND_EMAIL}.`, 26, y + 17);
+
+  addFooter(pdf, 1);
+  pdf.save(`${filename(data.proposalNumber)}.pdf`);
 }

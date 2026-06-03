@@ -250,8 +250,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
     try {
       const detail = await fetchTrainingProposalDetails(proposalId);
-      downloadProposal({
+      await downloadProposal({
         proposalNumber: detail.proposal.proposal_number,
+        status: detail.proposal.status,
         trainingTitle: detail.training.title,
         organizationName: detail.proposal.organization_name,
         contactPerson: detail.proposal.contact_person,
@@ -268,7 +269,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           name: addOn.name,
           quantity: addOn.quantity,
           totalPrice: addOn.totalPrice
-        }))
+        })),
+        adminNotes: detail.proposal.admin_notes,
+        declineReason: detail.proposal.decline_reason
       });
     } catch (err: any) {
       setError(err.message ?? 'Unable to download quotation.');
