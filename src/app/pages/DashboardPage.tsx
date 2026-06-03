@@ -11,6 +11,7 @@ import {
   fetchTrainingProposalDetails,
   fetchTrainingProposals,
   fetchTrainingSpeakerIds,
+  fetchTrainingDetails,
   fetchTrainings,
   fetchSpeakers,
   setTrainingActive,
@@ -18,6 +19,7 @@ import {
   Speaker,
   Training,
   TrainingCategory,
+  updateTrainingContent,
   updateTrainingSpeakers,
   updateProfileRole,
   updateTrainingProposalReview,
@@ -43,6 +45,8 @@ const emptyTrainingForm = {
   shortDescription: '',
   overview: '',
   targetParticipants: '',
+  objectivesText: '',
+  outlineText: '',
   duration: 'Half-day',
   deliveryMode: 'Hybrid',
   imageIcon: 'brain',
@@ -305,8 +309,16 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   const editTraining = async (training: Training) => {
     let speakerIds: string[] = [];
+    let objectivesText = '';
+    let outlineText = '';
     try {
-      speakerIds = await fetchTrainingSpeakerIds(training.id);
+      const [speakerData, detailData] = await Promise.all([
+        fetchTrainingSpeakerIds(training.id),
+        fetchTrainingDetails(training.id)
+      ]);
+      speakerIds = speakerData;
+      objectivesText = detailData.objectives.join('\n');
+      outlineText = detailData.outline.join('\n');
     } catch {
       speakerIds = [];
     }
@@ -319,6 +331,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       shortDescription: training.short_description,
       overview: training.overview,
       targetParticipants: training.target_participants ?? '',
+      objectivesText,
+      outlineText,
       duration: training.duration,
       deliveryMode: training.delivery_mode,
       imageIcon: training.image_icon ?? 'brain',
@@ -356,6 +370,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       });
 
       await updateTrainingSpeakers(trainingId, trainingForm.speakerIds);
+      await updateTrainingContent(trainingId, {
+        objectives: trainingForm.objectivesText.split('\n'),
+        outline: trainingForm.outlineText.split('\n')
+      });
       setTrainings(await fetchTrainings(true));
       setTrainingForm(emptyTrainingForm);
       setNotice(trainingForm.id ? 'Training updated.' : 'Training created.');
@@ -1218,6 +1236,18 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
               <Field label="Short Description" value={form.shortDescription} onChange={(value) => onFormChange({ ...form, shortDescription: value })} required wide />
               <TextareaField label="Overview" value={form.overview} onChange={(value) => onFormChange({ ...form, overview: value })} required />
               <TextareaField label="Target Participants" value={form.targetParticipants} onChange={(value) => onFormChange({ ...form, targetParticipants: value })} />
+              <TextareaField
+                label="Learning Objectives"
+                value={form.objectivesText}
+                onChange={(value) => onFormChange({ ...form, objectivesText: value })}
+                placeholder="Enter one learning objective per line"
+              />
+              <TextareaField
+                label="Training Outline"
+                value={form.outlineText}
+                onChange={(value) => onFormChange({ ...form, outlineText: value })}
+                placeholder="Enter one outline item per line"
+              />
 
               <div>
                 <label className="block mb-2">Category</label>
@@ -1513,16 +1543,17 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
   );
 }
 
-function TextareaField({ label, value, onChange, required = false }: {
+function TextareaField({ label, value, onChange, required = false, placeholder = '' }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+  placeholder?: string;
 }) {
   return (
     <div className="md:col-span-2">
       <label className="block mb-2">{label}</label>
-      <textarea value={value} onChange={(event) => onChange(event.target.value)} required={required} rows={4} className="w-full px-3 py-2 bg-card rounded-lg border border-border" />
+      <textarea value={value} onChange={(event) => onChange(event.target.value)} required={required} placeholder={placeholder} rows={4} className="w-full px-3 py-2 bg-card rounded-lg border border-border" />
     </div>
   );
 }

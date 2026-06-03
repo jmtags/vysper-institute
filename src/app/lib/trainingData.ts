@@ -273,6 +273,47 @@ export async function updateTrainingSpeakers(trainingId: string, speakerIds: str
   if (error) throw error;
 }
 
+export async function updateTrainingContent(trainingId: string, input: {
+  objectives: string[];
+  outline: string[];
+}) {
+  const [objectivesDelete, outlineDelete] = await Promise.all([
+    supabase.from('training_objectives').delete().eq('training_id', trainingId),
+    supabase.from('training_outline_items').delete().eq('training_id', trainingId)
+  ]);
+
+  if (objectivesDelete.error) throw objectivesDelete.error;
+  if (outlineDelete.error) throw outlineDelete.error;
+
+  const objectives = input.objectives.map((objective) => objective.trim()).filter(Boolean);
+  const outline = input.outline.map((item) => item.trim()).filter(Boolean);
+
+  const inserts = [];
+  if (objectives.length > 0) {
+    inserts.push(
+      supabase.from('training_objectives').insert(objectives.map((objective, index) => ({
+        training_id: trainingId,
+        objective,
+        sort_order: index + 1
+      })))
+    );
+  }
+
+  if (outline.length > 0) {
+    inserts.push(
+      supabase.from('training_outline_items').insert(outline.map((title, index) => ({
+        training_id: trainingId,
+        title,
+        sort_order: index + 1
+      })))
+    );
+  }
+
+  const results = await Promise.all(inserts);
+  const insertError = results.find((result) => result.error)?.error;
+  if (insertError) throw insertError;
+}
+
 export async function fetchTrainingAddOns() {
   const { data, error } = await supabase
     .from('training_add_ons')
