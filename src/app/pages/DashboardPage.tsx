@@ -227,6 +227,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     event.preventDefault();
     setSaving(true);
     setNotice('');
+    setError('');
 
     try {
       await upsertTraining({
@@ -249,8 +250,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       setTrainings(await fetchTrainings(true));
       setTrainingForm(emptyTrainingForm);
       setNotice(trainingForm.id ? 'Training updated.' : 'Training created.');
+      return true;
     } catch (err: any) {
       setError(err.message ?? 'Unable to save training.');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -551,14 +554,70 @@ function TrainingsAdminPanel({ categories, trainings, form, saving, onFormChange
   form: typeof emptyTrainingForm;
   saving: boolean;
   onFormChange: (form: typeof emptyTrainingForm) => void;
-  onSubmit: (event: FormEvent) => void;
+  onSubmit: (event: FormEvent) => Promise<boolean>;
   onEdit: (training: Training) => void;
   onCancel: () => void;
   onActiveChange: (trainingId: string, isActive: boolean) => void;
 }) {
+  const [showForm, setShowForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredTrainings = trainings.filter((training) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    return [
+      training.title,
+      training.short_description,
+      training.category?.name,
+      training.duration,
+      training.mode,
+      training.slug
+    ].some((value) => value?.toLowerCase().includes(query));
+  });
+
+  const handleAddTraining = () => {
+    onCancel();
+    setShowForm(true);
+  };
+
+  const handleEditTraining = (training: Training) => {
+    onEdit(training);
+    setShowForm(true);
+  };
+
+  const handleCancelForm = () => {
+    onCancel();
+    setShowForm(false);
+  };
+
+  const handleSubmitForm = async (event: FormEvent) => {
+    const saved = await onSubmit(event);
+    if (saved) setShowForm(false);
+  };
+
   return (
     <div className="space-y-8">
-      <form onSubmit={onSubmit} className="bg-muted rounded-lg p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-primary">Training Catalog</h3>
+          <p className="text-sm text-foreground/60">Search, edit, or add corporate training programs.</p>
+        </div>
+        <Button onClick={handleAddTraining}>Add Training</Button>
+      </div>
+
+      <div>
+        <label className="block mb-2 text-sm">Search Trainings</label>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search by title, category, duration, mode, or slug"
+          className="w-full px-4 py-3 bg-input-background rounded-lg border border-border"
+        />
+      </div>
+
+      {showForm && (
+      <form onSubmit={handleSubmitForm} className="bg-muted rounded-lg p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="md:col-span-2">
           <h3 className="text-primary">{form.id ? 'Edit Training' : 'Create Training'}</h3>
         </div>
@@ -591,13 +650,14 @@ function TrainingsAdminPanel({ categories, trainings, form, saving, onFormChange
         </label>
 
         <div className="md:col-span-2 flex gap-3 justify-end">
-          {form.id && <Button type="button" variant="outline" onClick={onCancel}>Cancel Edit</Button>}
+          <Button type="button" variant="outline" onClick={handleCancelForm}>Cancel</Button>
           <Button type="submit" disabled={saving}>{saving ? 'Saving...' : form.id ? 'Update Training' : 'Create Training'}</Button>
         </div>
       </form>
+      )}
 
       <div className="space-y-3">
-        {trainings.map((training) => (
+        {filteredTrainings.map((training) => (
           <div key={training.id} className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 p-4 bg-muted rounded-lg">
             <div>
               <p style={{ fontWeight: 600 }}>{training.title}</p>
@@ -608,13 +668,19 @@ function TrainingsAdminPanel({ categories, trainings, form, saving, onFormChange
               <p className="text-sm text-primary mt-1">PHP {training.base_price.toLocaleString()}</p>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
-              <Button size="sm" variant="outline" onClick={() => onEdit(training)}>Edit</Button>
+              <Button size="sm" variant="outline" onClick={() => handleEditTraining(training)}>Edit</Button>
               <Button size="sm" variant="ghost" onClick={() => onActiveChange(training.id, !training.is_active)} disabled={saving}>
                 {training.is_active ? 'Deactivate' : 'Restore'}
               </Button>
             </div>
           </div>
         ))}
+
+        {filteredTrainings.length === 0 && (
+          <div className="bg-muted rounded-lg p-6 text-center">
+            <p className="text-foreground/60">No trainings match your search.</p>
+          </div>
+        )}
       </div>
     </div>
   );
