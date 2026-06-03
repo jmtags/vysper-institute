@@ -617,43 +617,58 @@ function TrainingsAdminPanel({ categories, trainings, form, saving, onFormChange
       </div>
 
       {showForm && (
-      <form onSubmit={handleSubmitForm} className="bg-muted rounded-lg p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="md:col-span-2">
-          <h3 className="text-primary">{form.id ? 'Edit Training' : 'Create Training'}</h3>
+        <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center px-4 py-8">
+          <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleSubmitForm} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2 flex items-center justify-between gap-4 border-b border-border pb-4 mb-2">
+                <div>
+                  <h3 className="text-primary">{form.id ? 'Edit Training' : 'Create Training'}</h3>
+                  <p className="text-sm text-foreground/60">Fill in the training details, then save to update the catalog.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelForm}
+                  className="px-3 py-2 rounded-lg hover:bg-muted text-foreground/70"
+                >
+                  Close
+                </button>
+              </div>
+
+              <Field label="Title" value={form.title} onChange={(value) => onFormChange({ ...form, title: value })} required />
+              <Field label="Slug" value={form.slug} onChange={(value) => onFormChange({ ...form, slug: value })} required />
+              <Field label="Short Description" value={form.shortDescription} onChange={(value) => onFormChange({ ...form, shortDescription: value })} required wide />
+              <TextareaField label="Overview" value={form.overview} onChange={(value) => onFormChange({ ...form, overview: value })} required />
+              <TextareaField label="Target Participants" value={form.targetParticipants} onChange={(value) => onFormChange({ ...form, targetParticipants: value })} />
+
+              <div>
+                <label className="block mb-2">Category</label>
+                <select value={form.categoryId} onChange={(event) => onFormChange({ ...form, categoryId: event.target.value })} className="w-full px-3 py-2 bg-input-background rounded-lg border border-border">
+                  <option value="">Uncategorized</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <Field label="Duration" value={form.duration} onChange={(value) => onFormChange({ ...form, duration: value })} required />
+              <Field label="Delivery Mode" value={form.deliveryMode} onChange={(value) => onFormChange({ ...form, deliveryMode: value })} required />
+              <Field label="Icon Key" value={form.imageIcon} onChange={(value) => onFormChange({ ...form, imageIcon: value })} />
+              <NumberField label="Base Price" value={form.basePrice} onChange={(value) => onFormChange({ ...form, basePrice: value })} />
+              <NumberField label="Min Participants" value={form.minParticipants} onChange={(value) => onFormChange({ ...form, minParticipants: value })} />
+              <NumberField label="Max Participants" value={form.maxParticipants} onChange={(value) => onFormChange({ ...form, maxParticipants: value })} />
+
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={form.isActive} onChange={(event) => onFormChange({ ...form, isActive: event.target.checked })} />
+                Active
+              </label>
+
+              <div className="md:col-span-2 flex gap-3 justify-end border-t border-border pt-4 mt-2">
+                <Button type="button" variant="outline" onClick={handleCancelForm}>Cancel</Button>
+                <Button type="submit" disabled={saving}>{saving ? 'Saving...' : form.id ? 'Update Training' : 'Create Training'}</Button>
+              </div>
+            </form>
+          </div>
         </div>
-        <Field label="Title" value={form.title} onChange={(value) => onFormChange({ ...form, title: value })} required />
-        <Field label="Slug" value={form.slug} onChange={(value) => onFormChange({ ...form, slug: value })} required />
-        <Field label="Short Description" value={form.shortDescription} onChange={(value) => onFormChange({ ...form, shortDescription: value })} required wide />
-        <TextareaField label="Overview" value={form.overview} onChange={(value) => onFormChange({ ...form, overview: value })} required />
-        <TextareaField label="Target Participants" value={form.targetParticipants} onChange={(value) => onFormChange({ ...form, targetParticipants: value })} />
-
-        <div>
-          <label className="block mb-2">Category</label>
-          <select value={form.categoryId} onChange={(event) => onFormChange({ ...form, categoryId: event.target.value })} className="w-full px-3 py-2 bg-card rounded-lg border border-border">
-            <option value="">Uncategorized</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>{category.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <Field label="Duration" value={form.duration} onChange={(value) => onFormChange({ ...form, duration: value })} required />
-        <Field label="Delivery Mode" value={form.deliveryMode} onChange={(value) => onFormChange({ ...form, deliveryMode: value })} required />
-        <Field label="Icon Key" value={form.imageIcon} onChange={(value) => onFormChange({ ...form, imageIcon: value })} />
-        <NumberField label="Base Price" value={form.basePrice} onChange={(value) => onFormChange({ ...form, basePrice: value })} />
-        <NumberField label="Min Participants" value={form.minParticipants} onChange={(value) => onFormChange({ ...form, minParticipants: value })} />
-        <NumberField label="Max Participants" value={form.maxParticipants} onChange={(value) => onFormChange({ ...form, maxParticipants: value })} />
-
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={form.isActive} onChange={(event) => onFormChange({ ...form, isActive: event.target.checked })} />
-          Active
-        </label>
-
-        <div className="md:col-span-2 flex gap-3 justify-end">
-          <Button type="button" variant="outline" onClick={handleCancelForm}>Cancel</Button>
-          <Button type="submit" disabled={saving}>{saving ? 'Saving...' : form.id ? 'Update Training' : 'Create Training'}</Button>
-        </div>
-      </form>
       )}
 
       <div className="space-y-3">
