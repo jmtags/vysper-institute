@@ -1,5 +1,5 @@
 import type { jsPDF as JsPDF } from 'jspdf';
-import { BRAND_EMAIL, BRAND_HERO_IMAGE, BRAND_LOGO, BRAND_NAME, BRAND_TAGLINE } from '../branding';
+import { BRAND_EMAIL, BRAND_LOGO, BRAND_NAME, BRAND_TAGLINE } from '../branding';
 import { TrainingDetails } from './trainingData';
 
 const colors = {
@@ -83,10 +83,7 @@ export async function downloadTrainingBrochure(training: TrainingDetails) {
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageWidth = pdf.internal.pageSize.getWidth();
 
-  const [logoUrl, heroUrl] = await Promise.all([
-    imageToDataUrl(BRAND_LOGO).catch(() => ''),
-    imageToDataUrl(BRAND_HERO_IMAGE).catch(() => '')
-  ]);
+  const logoUrl = await imageToDataUrl(BRAND_LOGO).catch(() => '');
 
   pdf.setFillColor(colors.pale);
   pdf.rect(0, 0, pageWidth, 297, 'F');
@@ -96,10 +93,6 @@ export async function downloadTrainingBrochure(training: TrainingDetails) {
   pdf.rect(0, 84, pageWidth, 6, 'F');
   pdf.setFillColor(colors.green);
   pdf.rect(0, 90, pageWidth, 4, 'F');
-
-  if (heroUrl) {
-    pdf.addImage(heroUrl, 'PNG', 118, 18, 74, 48, undefined, 'FAST');
-  }
 
   if (logoUrl) {
     pdf.setFillColor(colors.white);
