@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Button';
-import { FileText, GraduationCap, Shield, User, Users, Settings } from 'lucide-react';
+import { FileText, GraduationCap, Mail, Shield, User, Users, Settings } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import { ContactMessage, ContactMessageStatus, fetchContactMessages, updateContactMessageStatus } from '../lib/contactMessages';
 import {
   fetchProfiles,
   fetchTrainingCategories,
@@ -22,7 +23,7 @@ interface DashboardPageProps {
   onNavigate: (page: string, data?: any) => void;
 }
 
-type AdminTab = 'proposals' | 'users' | 'trainings';
+type AdminTab = 'proposals' | 'messages' | 'users' | 'trainings';
 
 const emptyTrainingForm = {
   id: '',
@@ -47,6 +48,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>('proposals');
   const [proposals, setProposals] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
+  const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [categories, setCategories] = useState<TrainingCategory[]>([]);
   const [trainingForm, setTrainingForm] = useState(emptyTrainingForm);
@@ -72,7 +74,12 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       setTrainings(trainingData);
 
       if (isAdmin) {
-        setProfiles(await fetchProfiles());
+        const [profileData, messageData] = await Promise.all([
+          fetchProfiles(),
+          fetchContactMessages()
+        ]);
+        setProfiles(profileData);
+        setMessages(messageData);
       }
     } catch (err: any) {
       setError(err.message ?? 'Unable to load dashboard data.');
@@ -89,6 +96,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     if (!isAdmin) return 'My Training Quotations';
     if (activeTab === 'users') return 'User Management';
     if (activeTab === 'trainings') return 'Training Management';
+    if (activeTab === 'messages') return 'Contact Messages';
     return 'Quotation Requests';
   }, [activeTab, isAdmin]);
 
@@ -174,6 +182,22 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       setNotice('User role updated.');
     } catch (err: any) {
       setError(err.message ?? 'Unable to update role.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMessageStatusChange = async (messageId: string, status: ContactMessageStatus) => {
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      await updateContactMessageStatus(messageId, status);
+      setMessages((current) => current.map((message) => message.id === messageId ? { ...message, status } : message));
+      setNotice('Message status updated.');
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to update message.');
     } finally {
       setSaving(false);
     }
@@ -285,6 +309,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               {isAdmin ? (
                 <nav className="space-y-2">
                   <AdminNavButton active={activeTab === 'proposals'} onClick={() => setActiveTab('proposals')} icon={<FileText className="w-4 h-4" />} label="Quotations" />
+                  <AdminNavButton active={activeTab === 'messages'} onClick={() => setActiveTab('messages')} icon={<Mail className="w-4 h-4" />} label="Messages" />
                   <AdminNavButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<Users className="w-4 h-4" />} label="Users" />
                   <AdminNavButton active={activeTab === 'trainings'} onClick={() => setActiveTab('trainings')} icon={<Settings className="w-4 h-4" />} label="Trainings" />
                 </nav>
@@ -322,6 +347,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
               {!loading && !error && isAdmin && activeTab === 'users' && (
                 <UsersPanel profiles={profiles} currentUserId={user.id} saving={saving} onRoleChange={handleRoleChange} />
+              )}
+
+              {!loading && !error && isAdmin && activeTab === 'messages' && (
+                <MessagesPanel messages={messages} saving={saving} onStatusChange={handleMessageStatusChange} />
               )}
 
               {!loading && !error && isAdmin && activeTab === 'trainings' && (
@@ -454,6 +483,62 @@ function UsersPanel({ profiles, currentUserId, saving, onRoleChange }: {
             <option value="user">user</option>
             <option value="admin">admin</option>
           </select>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MessagesPanel({ messages, saving, onStatusChange }: {
+  messages: ContactMessage[];
+  saving: boolean;
+  onStatusChange: (messageId: string, status: ContactMessageStatus) => void;
+}) {
+  if (messages.length === 0) {
+    return (
+      <div className="bg-muted rounded-lg p-6 text-center">
+        <p className="text-foreground/70">No contact messages yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {messages.map((message) => (
+        <div key={message.id} className="grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-4 p-4 bg-muted rounded-lg">
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <p style={{ fontWeight: 600 }}>{message.name}</p>
+              <span className={`px-2 py-0.5 rounded-full text-xs capitalize ${
+                message.status === 'new'
+                  ? 'bg-accent/20 text-accent'
+                  : message.status === 'read'
+                    ? 'bg-secondary/20 text-secondary'
+                    : 'bg-foreground/10 text-foreground/60'
+              }`}>
+                {message.status}
+              </span>
+            </div>
+            <a href={`mailto:${message.email}`} className="text-sm text-primary hover:underline">
+              {message.email}
+            </a>
+            <p className="text-sm text-foreground/80 mt-3 whitespace-pre-wrap">{message.message}</p>
+            <p className="text-xs text-foreground/50 mt-3">
+              Sent {new Date(message.created_at).toLocaleString()}
+            </p>
+          </div>
+          <div className="xl:text-right">
+            <select
+              value={message.status}
+              disabled={saving}
+              onChange={(event) => onStatusChange(message.id, event.target.value as ContactMessageStatus)}
+              className="px-3 py-2 bg-card rounded-lg border border-border capitalize"
+            >
+              <option value="new">New</option>
+              <option value="read">Read</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
         </div>
       ))}
     </div>

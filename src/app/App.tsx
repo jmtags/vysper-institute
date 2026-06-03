@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { AuthProvider } from './auth/AuthContext';
@@ -10,6 +10,7 @@ import { TrainingBuilderPage } from './pages/TrainingBuilderPage';
 import { ProposalPreviewPage } from './pages/ProposalPreviewPage';
 import { CoursePlayerPage } from './pages/CoursePlayerPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { submitContactMessage } from './lib/contactMessages';
 import { BRAND_NAME } from './branding';
 
 function ComingSoonPage({ title }: { title: string }) {
@@ -21,6 +22,84 @@ function ComingSoonPage({ title }: { title: string }) {
         <p className="text-xl text-foreground/70">
           This service is being prepared for a later release. For the MVP, training programs and quotation requests are available now.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function ContactPage() {
+  const [form, setForm] = useState({ name: '', email: '', message: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setNotice('');
+    setError('');
+
+    try {
+      await submitContactMessage(form);
+      setForm({ name: '', email: '', message: '' });
+      setNotice('Your message has been sent. Our team will get back to you soon.');
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to send your message. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-muted/30 py-20 px-6">
+      <div className="max-w-2xl mx-auto">
+        <h1 className="mb-3 text-center text-primary">Contact Us</h1>
+        <p className="text-center text-foreground/70 mb-8">
+          Send a message to VYSPER Institute and our team will respond as soon as possible.
+        </p>
+        <form onSubmit={handleSubmit} className="bg-card rounded-xl shadow-sm border border-border p-8 space-y-4">
+          <div>
+            <label className="block mb-2">Name</label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              className="w-full px-4 py-3 bg-input-background rounded-lg border border-border"
+              required
+            />
+          </div>
+          <div>
+            <label className="block mb-2">Email</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(event) => setForm({ ...form, email: event.target.value })}
+              className="w-full px-4 py-3 bg-input-background rounded-lg border border-border"
+              required
+            />
+          </div>
+          <div>
+            <label className="block mb-2">Message</label>
+            <textarea
+              rows={5}
+              value={form.message}
+              onChange={(event) => setForm({ ...form, message: event.target.value })}
+              className="w-full px-4 py-3 bg-input-background rounded-lg border border-border"
+              required
+            />
+          </div>
+
+          {notice && <p className="text-sm text-secondary">{notice}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-60"
+          >
+            {submitting ? 'Sending...' : 'Send Message'}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -73,32 +152,7 @@ function AppContent() {
           </div>
         );
       case 'contact':
-        return (
-          <div className="min-h-screen bg-muted/30 py-20 px-6">
-            <div className="max-w-2xl mx-auto">
-              <h1 className="mb-6 text-center text-primary">Contact Us</h1>
-              <div className="bg-card rounded-xl shadow-sm border border-border p-8">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block mb-2">Name</label>
-                    <input type="text" className="w-full px-4 py-3 bg-input-background rounded-lg border border-border" />
-                  </div>
-                  <div>
-                    <label className="block mb-2">Email</label>
-                    <input type="email" className="w-full px-4 py-3 bg-input-background rounded-lg border border-border" />
-                  </div>
-                  <div>
-                    <label className="block mb-2">Message</label>
-                    <textarea rows={5} className="w-full px-4 py-3 bg-input-background rounded-lg border border-border"></textarea>
-                  </div>
-                  <button className="w-full px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90">
-                    Send Message
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
+        return <ContactPage />;
       default:
         return <HomePage onNavigate={handleNavigation} />;
     }
