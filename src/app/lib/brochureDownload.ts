@@ -88,36 +88,36 @@ export async function downloadTrainingBrochure(training: TrainingDetails) {
   pdf.setFillColor(colors.pale);
   pdf.rect(0, 0, pageWidth, 297, 'F');
   pdf.setFillColor(colors.navy);
-  pdf.rect(0, 0, pageWidth, 68, 'F');
+  pdf.rect(0, 0, pageWidth, 55, 'F');
   pdf.setFillColor(colors.teal);
-  pdf.rect(0, 66, pageWidth, 5, 'F');
+  pdf.rect(0, 53, pageWidth, 4, 'F');
   pdf.setFillColor(colors.green);
-  pdf.rect(0, 71, pageWidth, 3, 'F');
+  pdf.rect(0, 57, pageWidth, 3, 'F');
 
   if (logoUrl) {
     pdf.setFillColor(colors.white);
-    pdf.roundedRect(18, 14, 24, 24, 4, 4, 'F');
-    pdf.addImage(logoUrl, 'PNG', 21, 17, 18, 18, undefined, 'FAST');
+    pdf.roundedRect(18, 10, 20, 20, 4, 4, 'F');
+    pdf.addImage(logoUrl, 'PNG', 20.5, 12.5, 15, 15, undefined, 'FAST');
   }
 
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(11);
   pdf.setTextColor(colors.white);
-  pdf.text(BRAND_NAME, 48, 21);
+  pdf.text(BRAND_NAME, 44, 17);
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(8);
-  pdf.text(BRAND_TAGLINE, 48, 27);
+  pdf.text(BRAND_TAGLINE, 44, 23);
 
   pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(22);
-  pdf.text(pdf.splitTextToSize(training.title, 132), 18, 47);
+  pdf.setFontSize(18);
+  pdf.text(pdf.splitTextToSize(training.title, 144), 18, 39);
   pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(10);
+  pdf.setFontSize(9);
   pdf.setTextColor('#d9f0ef');
-  pdf.text(pdf.splitTextToSize(training.description, 132), 18, 61);
+  pdf.text(pdf.splitTextToSize(training.description, 148), 18, 49);
 
   pdf.setFillColor(colors.white);
-  pdf.roundedRect(18, 88, 174, 34, 5, 5, 'F');
+  pdf.roundedRect(18, 74, 174, 32, 5, 5, 'F');
   const statItems = [
     ['Duration', training.duration],
     ['Delivery Mode', training.mode],
@@ -130,14 +130,14 @@ export async function downloadTrainingBrochure(training: TrainingDetails) {
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(8);
     pdf.setTextColor(colors.muted);
-    pdf.text(label, x, 101);
+    pdf.text(label, x, 87);
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(10);
     pdf.setTextColor(colors.navy);
-    pdf.text(pdf.splitTextToSize(value, 36), x, 109);
+    pdf.text(pdf.splitTextToSize(value, 36), x, 95);
   });
 
-  let y = 138;
+  let y = 122;
   y = addSectionTitle(pdf, 'Program Overview', 18, y);
   y = addWrappedText(pdf, training.overview, 18, y, 174, { size: 10.5, lineHeight: 5.4 });
 
