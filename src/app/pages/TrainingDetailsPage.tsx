@@ -131,6 +131,40 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
                 </div>
               </section>
 
+              {(details?.speakers ?? []).length > 0 && (
+                <section className="bg-card rounded-xl p-8 shadow-sm border border-border">
+                  <h2 className="mb-6 text-primary">Keynote Speaker{(details?.speakers ?? []).length > 1 ? 's' : ''}</h2>
+                  <div className="space-y-6">
+                    {(details?.speakers ?? []).map((speaker) => (
+                      <div key={speaker.id} className="grid grid-cols-1 sm:grid-cols-[96px_1fr] gap-5">
+                        {speaker.profile_image_url ? (
+                          <img
+                            src={speaker.profile_image_url}
+                            alt={speaker.full_name}
+                            className="w-24 h-24 rounded-lg object-cover bg-muted"
+                          />
+                        ) : (
+                          <div className="w-24 h-24 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-2xl" style={{ fontWeight: 700 }}>
+                            {speaker.full_name.split(' ').map((part) => part[0]).join('').slice(0, 2)}
+                          </div>
+                        )}
+                        <div>
+                          <h3 className="text-primary">{speaker.full_name}</h3>
+                          {(speaker.title || speaker.specialty) && (
+                            <p className="text-sm text-secondary mt-1">
+                              {[speaker.title, speaker.specialty].filter(Boolean).join(' / ')}
+                            </p>
+                          )}
+                          <p className="text-foreground/80 mt-3 leading-relaxed">
+                            {speaker.bio_notes || 'Speaker bionotes will be available soon.'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               <section className="bg-card rounded-xl p-8 shadow-sm border border-border">
                 <h2 className="mb-6 text-primary">Testimonials</h2>
                 <div className="space-y-6">

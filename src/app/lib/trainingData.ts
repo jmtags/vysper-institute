@@ -36,6 +36,7 @@ export interface TrainingDetails extends Training {
     content: string;
     rating: number;
   }>;
+  speakers: Speaker[];
 }
 
 export interface TrainingAddOn {
@@ -45,6 +46,17 @@ export interface TrainingAddOn {
   description: string | null;
   pricing_type: 'included' | 'fixed' | 'per_participant';
   unit_price: number;
+}
+
+export interface Speaker {
+  id: string;
+  full_name: string;
+  title: string | null;
+  specialty: string | null;
+  bio_notes: string | null;
+  profile_image_url: string | null;
+  is_active: boolean;
+  sort_order: number;
 }
 
 const iconMap: Record<string, string> = {
@@ -104,7 +116,8 @@ export async function fetchTrainingDetails(trainingId: string) {
       category:training_categories(id, name, slug),
       objectives:training_objectives(objective, sort_order),
       outline:training_outline_items(title, sort_order),
-      testimonials:training_testimonials(client_name, client_role, content, rating, sort_order, is_active)
+      testimonials:training_testimonials(client_name, client_role, content, rating, sort_order, is_active),
+      speaker_links:training_speakers(sort_order, speaker:speakers(id, full_name, title, specialty, bio_notes, profile_image_url, is_active, sort_order))
     `)
     .eq('id', trainingId)
     .single();
@@ -122,8 +135,96 @@ export async function fetchTrainingDetails(trainingId: string) {
       .map((item) => item.title),
     testimonials: [...(data.testimonials ?? [])]
       .filter((item) => item.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order),
+    speakers: [...(data.speaker_links ?? [])]
+      .filter((item) => item.speaker?.is_active)
       .sort((a, b) => a.sort_order - b.sort_order)
+      .map((item) => item.speaker)
   } satisfies TrainingDetails;
+}
+
+export async function fetchSpeakers(includeInactive = false) {
+  let query = supabase
+    .from('speakers')
+    .select('id, full_name, title, specialty, bio_notes, profile_image_url, is_active, sort_order')
+    .order('sort_order')
+    .order('full_name');
+
+  if (!includeInactive) {
+    query = query.eq('is_active', true);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []) as Speaker[];
+}
+
+export async function upsertSpeaker(input: {
+  id?: string;
+  fullName: string;
+  title?: string;
+  specialty?: string;
+  bioNotes?: string;
+  profileImageUrl?: string;
+  isActive: boolean;
+  sortOrder: number;
+}) {
+  const payload = {
+    full_name: input.fullName,
+    title: input.title || null,
+    specialty: input.specialty || null,
+    bio_notes: input.bioNotes || null,
+    profile_image_url: input.profileImageUrl || null,
+    is_active: input.isActive,
+    sort_order: input.sortOrder
+  };
+
+  const query = input.id
+    ? supabase.from('speakers').update(payload).eq('id', input.id)
+    : supabase.from('speakers').insert(payload);
+
+  const { error } = await query;
+  if (error) throw error;
+}
+
+export async function setSpeakerActive(speakerId: string, isActive: boolean) {
+  const { error } = await supabase
+    .from('speakers')
+    .update({ is_active: isActive })
+    .eq('id', speakerId);
+
+  if (error) throw error;
+}
+
+export async function fetchTrainingSpeakerIds(trainingId: string) {
+  const { data, error } = await supabase
+    .from('training_speakers')
+    .select('speaker_id')
+    .eq('training_id', trainingId);
+
+  if (error) throw error;
+  return (data ?? []).map((item) => item.speaker_id as string);
+}
+
+export async function updateTrainingSpeakers(trainingId: string, speakerIds: string[]) {
+  const { error: deleteError } = await supabase
+    .from('training_speakers')
+    .delete()
+    .eq('training_id', trainingId);
+
+  if (deleteError) throw deleteError;
+
+  if (speakerIds.length === 0) return;
+
+  const { error } = await supabase
+    .from('training_speakers')
+    .insert(speakerIds.map((speakerId, index) => ({
+      training_id: trainingId,
+      speaker_id: speakerId,
+      sort_order: index + 1
+    })));
+
+  if (error) throw error;
 }
 
 export async function fetchTrainingAddOns() {
@@ -392,11 +493,12 @@ export async function upsertTraining(input: {
   };
 
   const query = input.id
-    ? supabase.from('trainings').update(payload).eq('id', input.id)
-    : supabase.from('trainings').insert(payload);
+    ? supabase.from('trainings').update(payload).eq('id', input.id).select('id').single()
+    : supabase.from('trainings').insert(payload).select('id').single();
 
-  const { error } = await query;
+  const { data, error } = await query;
   if (error) throw error;
+  return data.id as string;
 }
 
 export async function setTrainingActive(trainingId: string, isActive: boolean) {

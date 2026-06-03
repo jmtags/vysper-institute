@@ -8,13 +8,19 @@ import {
   fetchTrainingCategories,
   fetchTrainingProposalDetails,
   fetchTrainingProposals,
+  fetchTrainingSpeakerIds,
   fetchTrainings,
+  fetchSpeakers,
   setTrainingActive,
+  setSpeakerActive,
+  Speaker,
   Training,
   TrainingCategory,
+  updateTrainingSpeakers,
   updateProfileRole,
   updateTrainingProposalReview,
   updateTrainingProposalStatus,
+  upsertSpeaker,
   upsertTraining
 } from '../lib/trainingData';
 import { BRAND_NAME } from '../branding';
@@ -24,7 +30,7 @@ interface DashboardPageProps {
   onNavigate: (page: string, data?: any) => void;
 }
 
-type AdminTab = 'proposals' | 'messages' | 'users' | 'trainings';
+type AdminTab = 'proposals' | 'messages' | 'users' | 'trainings' | 'speakers';
 
 const emptyTrainingForm = {
   id: '',
@@ -40,6 +46,18 @@ const emptyTrainingForm = {
   minParticipants: 15,
   maxParticipants: 30,
   basePrice: 25000,
+  isActive: true,
+  speakerIds: [] as string[]
+};
+
+const emptySpeakerForm = {
+  id: '',
+  fullName: '',
+  title: '',
+  specialty: '',
+  bioNotes: '',
+  profileImageUrl: '',
+  sortOrder: 0,
   isActive: true
 };
 
@@ -52,7 +70,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [categories, setCategories] = useState<TrainingCategory[]>([]);
+  const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [trainingForm, setTrainingForm] = useState(emptyTrainingForm);
+  const [speakerForm, setSpeakerForm] = useState(emptySpeakerForm);
   const [quotationReview, setQuotationReview] = useState<any | null>(null);
   const [reviewForm, setReviewForm] = useState({
     status: 'submitted',
@@ -70,15 +90,17 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     setError('');
 
     try {
-      const [proposalData, categoryData, trainingData] = await Promise.all([
+      const [proposalData, categoryData, trainingData, speakerData] = await Promise.all([
         fetchTrainingProposals(),
         fetchTrainingCategories(),
-        fetchTrainings(isAdmin)
+        fetchTrainings(isAdmin),
+        fetchSpeakers(isAdmin)
       ]);
 
       setProposals(proposalData);
       setCategories(categoryData);
       setTrainings(trainingData);
+      setSpeakers(speakerData);
 
       if (isAdmin) {
         const [profileData, messageData] = await Promise.all([
@@ -103,6 +125,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     if (!isAdmin) return 'My Training Quotations';
     if (activeTab === 'users') return 'User Management';
     if (activeTab === 'trainings') return 'Training Management';
+    if (activeTab === 'speakers') return 'Speaker Management';
     if (activeTab === 'messages') return 'Contact Messages';
     return 'Quotation Requests';
   }, [activeTab, isAdmin]);
@@ -273,7 +296,14 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     }
   };
 
-  const editTraining = (training: Training) => {
+  const editTraining = async (training: Training) => {
+    let speakerIds: string[] = [];
+    try {
+      speakerIds = await fetchTrainingSpeakerIds(training.id);
+    } catch {
+      speakerIds = [];
+    }
+
     setTrainingForm({
       id: training.id,
       categoryId: training.category_id ?? '',
@@ -288,7 +318,8 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       minParticipants: training.min_participants,
       maxParticipants: training.max_participants,
       basePrice: training.base_price,
-      isActive: training.is_active
+      isActive: training.is_active,
+      speakerIds
     });
     setActiveTab('trainings');
   };
@@ -300,7 +331,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     setError('');
 
     try {
-      await upsertTraining({
+      const trainingId = await upsertTraining({
         id: trainingForm.id || undefined,
         categoryId: trainingForm.categoryId || null,
         slug: trainingForm.slug,
@@ -317,6 +348,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         isActive: trainingForm.isActive
       });
 
+      await updateTrainingSpeakers(trainingId, trainingForm.speakerIds);
       setTrainings(await fetchTrainings(true));
       setTrainingForm(emptyTrainingForm);
       setNotice(trainingForm.id ? 'Training updated.' : 'Training created.');
@@ -324,6 +356,66 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     } catch (err: any) {
       setError(err.message ?? 'Unable to save training.');
       return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editSpeaker = (speaker: Speaker) => {
+    setSpeakerForm({
+      id: speaker.id,
+      fullName: speaker.full_name,
+      title: speaker.title ?? '',
+      specialty: speaker.specialty ?? '',
+      bioNotes: speaker.bio_notes ?? '',
+      profileImageUrl: speaker.profile_image_url ?? '',
+      sortOrder: speaker.sort_order,
+      isActive: speaker.is_active
+    });
+    setActiveTab('speakers');
+  };
+
+  const handleSpeakerSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      await upsertSpeaker({
+        id: speakerForm.id || undefined,
+        fullName: speakerForm.fullName,
+        title: speakerForm.title,
+        specialty: speakerForm.specialty,
+        bioNotes: speakerForm.bioNotes,
+        profileImageUrl: speakerForm.profileImageUrl,
+        sortOrder: Number(speakerForm.sortOrder),
+        isActive: speakerForm.isActive
+      });
+
+      setSpeakers(await fetchSpeakers(true));
+      setSpeakerForm(emptySpeakerForm);
+      setNotice(speakerForm.id ? 'Speaker updated.' : 'Speaker created.');
+      return true;
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to save speaker.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSpeakerActiveChange = async (speakerId: string, isActive: boolean) => {
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      await setSpeakerActive(speakerId, isActive);
+      setSpeakers(await fetchSpeakers(true));
+      setNotice(isActive ? 'Speaker restored.' : 'Speaker deactivated.');
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to update speaker.');
     } finally {
       setSaving(false);
     }
@@ -385,6 +477,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   <AdminNavButton active={activeTab === 'messages'} onClick={() => setActiveTab('messages')} icon={<Mail className="w-4 h-4" />} label="Messages" />
                   <AdminNavButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<Users className="w-4 h-4" />} label="Users" />
                   <AdminNavButton active={activeTab === 'trainings'} onClick={() => setActiveTab('trainings')} icon={<Settings className="w-4 h-4" />} label="Trainings" />
+                  <AdminNavButton active={activeTab === 'speakers'} onClick={() => setActiveTab('speakers')} icon={<GraduationCap className="w-4 h-4" />} label="Speakers" />
                 </nav>
               ) : (
                 <Button variant="outline" className="w-full" onClick={() => onNavigate('trainings')}>
@@ -431,6 +524,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                 <TrainingsAdminPanel
                   categories={categories}
                   trainings={trainings}
+                  speakers={speakers}
                   form={trainingForm}
                   saving={saving}
                   onFormChange={setTrainingForm}
@@ -438,6 +532,19 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   onEdit={editTraining}
                   onCancel={() => setTrainingForm(emptyTrainingForm)}
                   onActiveChange={handleTrainingActiveChange}
+                />
+              )}
+
+              {!loading && !error && isAdmin && activeTab === 'speakers' && (
+                <SpeakersAdminPanel
+                  speakers={speakers}
+                  form={speakerForm}
+                  saving={saving}
+                  onFormChange={setSpeakerForm}
+                  onSubmit={handleSpeakerSubmit}
+                  onEdit={editSpeaker}
+                  onCancel={() => setSpeakerForm(emptySpeakerForm)}
+                  onActiveChange={handleSpeakerActiveChange}
                 />
               )}
             </section>
@@ -818,9 +925,10 @@ function MessagesPanel({ messages, saving, onStatusChange }: {
   );
 }
 
-function TrainingsAdminPanel({ categories, trainings, form, saving, onFormChange, onSubmit, onEdit, onCancel, onActiveChange }: {
+function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, onFormChange, onSubmit, onEdit, onCancel, onActiveChange }: {
   categories: TrainingCategory[];
   trainings: Training[];
+  speakers: Speaker[];
   form: typeof emptyTrainingForm;
   saving: boolean;
   onFormChange: (form: typeof emptyTrainingForm) => void;
@@ -927,6 +1035,37 @@ function TrainingsAdminPanel({ categories, trainings, form, saving, onFormChange
               <NumberField label="Min Participants" value={form.minParticipants} onChange={(value) => onFormChange({ ...form, minParticipants: value })} />
               <NumberField label="Max Participants" value={form.maxParticipants} onChange={(value) => onFormChange({ ...form, maxParticipants: value })} />
 
+              <div className="md:col-span-2">
+                <label className="block mb-2">Keynote Speaker/s</label>
+                {speakers.length === 0 ? (
+                  <p className="text-sm text-foreground/60 bg-input-background rounded-lg border border-border p-3">
+                    No speakers available yet. Add speakers from the Speakers module first.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {speakers.map((speaker) => (
+                      <label key={speaker.id} className="flex items-start gap-3 p-3 bg-input-background rounded-lg border border-border">
+                        <input
+                          type="checkbox"
+                          checked={form.speakerIds.includes(speaker.id)}
+                          onChange={(event) => {
+                            const speakerIds = event.target.checked
+                              ? [...form.speakerIds, speaker.id]
+                              : form.speakerIds.filter((speakerId) => speakerId !== speaker.id);
+                            onFormChange({ ...form, speakerIds });
+                          }}
+                          className="mt-1"
+                        />
+                        <span>
+                          <span className="block" style={{ fontWeight: 600 }}>{speaker.full_name}</span>
+                          <span className="block text-xs text-foreground/60">{speaker.specialty || speaker.title || 'Speaker'}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={form.isActive} onChange={(event) => onFormChange({ ...form, isActive: event.target.checked })} />
                 Active
@@ -964,6 +1103,145 @@ function TrainingsAdminPanel({ categories, trainings, form, saving, onFormChange
         {filteredTrainings.length === 0 && (
           <div className="bg-muted rounded-lg p-6 text-center">
             <p className="text-foreground/60">No trainings match your search.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SpeakersAdminPanel({ speakers, form, saving, onFormChange, onSubmit, onEdit, onCancel, onActiveChange }: {
+  speakers: Speaker[];
+  form: typeof emptySpeakerForm;
+  saving: boolean;
+  onFormChange: (form: typeof emptySpeakerForm) => void;
+  onSubmit: (event: FormEvent) => Promise<boolean>;
+  onEdit: (speaker: Speaker) => void;
+  onCancel: () => void;
+  onActiveChange: (speakerId: string, isActive: boolean) => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredSpeakers = speakers.filter((speaker) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    return [
+      speaker.full_name,
+      speaker.title,
+      speaker.specialty,
+      speaker.bio_notes
+    ].some((value) => value?.toLowerCase().includes(query));
+  });
+
+  const handleAddSpeaker = () => {
+    onCancel();
+    setShowForm(true);
+  };
+
+  const handleEditSpeaker = (speaker: Speaker) => {
+    onEdit(speaker);
+    setShowForm(true);
+  };
+
+  const handleCancelForm = () => {
+    onCancel();
+    setShowForm(false);
+  };
+
+  const handleSubmitForm = async (event: FormEvent) => {
+    const saved = await onSubmit(event);
+    if (saved) setShowForm(false);
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-primary">Speaker Directory</h3>
+          <p className="text-sm text-foreground/60">Manage keynote speakers, bionotes, specialties, and profile images.</p>
+        </div>
+        <Button onClick={handleAddSpeaker}>Add Speaker</Button>
+      </div>
+
+      <div>
+        <label className="block mb-2 text-sm">Search Speakers</label>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search by name, title, specialty, or bionotes"
+          className="w-full px-4 py-3 bg-input-background rounded-lg border border-border"
+        />
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center px-4 py-8">
+          <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleSubmitForm} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2 flex items-center justify-between gap-4 border-b border-border pb-4 mb-2">
+                <div>
+                  <h3 className="text-primary">{form.id ? 'Edit Speaker' : 'Create Speaker'}</h3>
+                  <p className="text-sm text-foreground/60">Add profile details that will appear on training pages.</p>
+                </div>
+                <button type="button" onClick={handleCancelForm} className="px-3 py-2 rounded-lg hover:bg-muted text-foreground/70">
+                  Close
+                </button>
+              </div>
+
+              <Field label="Full Name" value={form.fullName} onChange={(value) => onFormChange({ ...form, fullName: value })} required />
+              <Field label="Title" value={form.title} onChange={(value) => onFormChange({ ...form, title: value })} />
+              <Field label="Specialty" value={form.specialty} onChange={(value) => onFormChange({ ...form, specialty: value })} wide />
+              <Field label="Profile Image URL" value={form.profileImageUrl} onChange={(value) => onFormChange({ ...form, profileImageUrl: value })} wide />
+              <TextareaField label="Bionotes" value={form.bioNotes} onChange={(value) => onFormChange({ ...form, bioNotes: value })} />
+              <NumberField label="Sort Order" value={form.sortOrder} onChange={(value) => onFormChange({ ...form, sortOrder: value })} />
+
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={form.isActive} onChange={(event) => onFormChange({ ...form, isActive: event.target.checked })} />
+                Active
+              </label>
+
+              <div className="md:col-span-2 flex gap-3 justify-end border-t border-border pt-4 mt-2">
+                <Button type="button" variant="outline" onClick={handleCancelForm}>Cancel</Button>
+                <Button type="submit" disabled={saving}>{saving ? 'Saving...' : form.id ? 'Update Speaker' : 'Create Speaker'}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {filteredSpeakers.map((speaker) => (
+          <div key={speaker.id} className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 p-4 bg-muted rounded-lg">
+            <div className="flex gap-4">
+              {speaker.profile_image_url ? (
+                <img src={speaker.profile_image_url} alt={speaker.full_name} className="h-16 w-16 rounded-lg object-cover bg-card" />
+              ) : (
+                <div className="h-16 w-16 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <GraduationCap className="w-7 h-7" />
+                </div>
+              )}
+              <div>
+                <p style={{ fontWeight: 600 }}>{speaker.full_name}</p>
+                <p className="text-sm text-foreground/60">
+                  {[speaker.title, speaker.specialty].filter(Boolean).join(' · ') || 'No title or specialty'}
+                  {!speaker.is_active && ' · Inactive'}
+                </p>
+                <p className="text-sm text-foreground/70 mt-2 line-clamp-2">{speaker.bio_notes || 'No bionotes yet.'}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <Button size="sm" variant="outline" onClick={() => handleEditSpeaker(speaker)}>Edit</Button>
+              <Button size="sm" variant="ghost" onClick={() => onActiveChange(speaker.id, !speaker.is_active)} disabled={saving}>
+                {speaker.is_active ? 'Deactivate' : 'Restore'}
+              </Button>
+            </div>
+          </div>
+        ))}
+
+        {filteredSpeakers.length === 0 && (
+          <div className="bg-muted rounded-lg p-6 text-center">
+            <p className="text-foreground/60">No speakers match your search.</p>
           </div>
         )}
       </div>
