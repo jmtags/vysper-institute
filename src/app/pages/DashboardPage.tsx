@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Button';
 import { FileText, GraduationCap, Mail, Shield, User, Users, Settings } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
@@ -20,6 +20,7 @@ import {
   updateProfileRole,
   updateTrainingProposalReview,
   updateTrainingProposalStatus,
+  uploadSpeakerProfileImage,
   upsertSpeaker,
   upsertTraining
 } from '../lib/trainingData';
@@ -421,6 +422,23 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     }
   };
 
+  const handleSpeakerImageUpload = async (file: File) => {
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      const imageUrl = await uploadSpeakerProfileImage(file);
+      setNotice('Speaker photo uploaded. Save the speaker to keep this photo.');
+      return imageUrl;
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to upload speaker photo.');
+      return '';
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleTrainingActiveChange = async (trainingId: string, isActive: boolean) => {
     setSaving(true);
     setNotice('');
@@ -545,6 +563,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   onEdit={editSpeaker}
                   onCancel={() => setSpeakerForm(emptySpeakerForm)}
                   onActiveChange={handleSpeakerActiveChange}
+                  onImageUpload={handleSpeakerImageUpload}
                 />
               )}
             </section>
@@ -1110,7 +1129,7 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
   );
 }
 
-function SpeakersAdminPanel({ speakers, form, saving, onFormChange, onSubmit, onEdit, onCancel, onActiveChange }: {
+function SpeakersAdminPanel({ speakers, form, saving, onFormChange, onSubmit, onEdit, onCancel, onActiveChange, onImageUpload }: {
   speakers: Speaker[];
   form: typeof emptySpeakerForm;
   saving: boolean;
@@ -1119,9 +1138,11 @@ function SpeakersAdminPanel({ speakers, form, saving, onFormChange, onSubmit, on
   onEdit: (speaker: Speaker) => void;
   onCancel: () => void;
   onActiveChange: (speakerId: string, isActive: boolean) => void;
+  onImageUpload: (file: File) => Promise<string>;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const filteredSpeakers = speakers.filter((speaker) => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
@@ -1152,6 +1173,19 @@ function SpeakersAdminPanel({ speakers, form, saving, onFormChange, onSubmit, on
   const handleSubmitForm = async (event: FormEvent) => {
     const saved = await onSubmit(event);
     if (saved) setShowForm(false);
+  };
+
+  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    const imageUrl = await onImageUpload(file);
+    if (imageUrl) {
+      onFormChange({ ...form, profileImageUrl: imageUrl });
+    }
+    event.target.value = '';
+    setUploadingImage(false);
   };
 
   return (
@@ -1192,7 +1226,31 @@ function SpeakersAdminPanel({ speakers, form, saving, onFormChange, onSubmit, on
               <Field label="Full Name" value={form.fullName} onChange={(value) => onFormChange({ ...form, fullName: value })} required />
               <Field label="Title" value={form.title} onChange={(value) => onFormChange({ ...form, title: value })} />
               <Field label="Specialty" value={form.specialty} onChange={(value) => onFormChange({ ...form, specialty: value })} wide />
-              <Field label="Profile Image URL" value={form.profileImageUrl} onChange={(value) => onFormChange({ ...form, profileImageUrl: value })} wide />
+              <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-[96px_1fr] gap-4 items-start">
+                {form.profileImageUrl ? (
+                  <img src={form.profileImageUrl} alt="Speaker preview" className="h-24 w-24 rounded-lg object-cover bg-muted border border-border" />
+                ) : (
+                  <div className="h-24 w-24 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-border">
+                    <GraduationCap className="w-8 h-8" />
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <label className="block">
+                    <span className="block mb-2">Upload Profile Image</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      disabled={saving || uploadingImage}
+                      className="w-full px-3 py-2 bg-card rounded-lg border border-border"
+                    />
+                  </label>
+                  <Field label="Profile Image URL" value={form.profileImageUrl} onChange={(value) => onFormChange({ ...form, profileImageUrl: value })} />
+                  <p className="text-xs text-foreground/60">
+                    {uploadingImage ? 'Uploading photo...' : 'Upload a JPG, PNG, or WebP image up to 5MB.'}
+                  </p>
+                </div>
+              </div>
               <TextareaField label="Bionotes" value={form.bioNotes} onChange={(value) => onFormChange({ ...form, bioNotes: value })} />
               <NumberField label="Sort Order" value={form.sortOrder} onChange={(value) => onFormChange({ ...form, sortOrder: value })} />
 
@@ -1224,8 +1282,8 @@ function SpeakersAdminPanel({ speakers, form, saving, onFormChange, onSubmit, on
               <div>
                 <p style={{ fontWeight: 600 }}>{speaker.full_name}</p>
                 <p className="text-sm text-foreground/60">
-                  {[speaker.title, speaker.specialty].filter(Boolean).join(' · ') || 'No title or specialty'}
-                  {!speaker.is_active && ' · Inactive'}
+                  {[speaker.title, speaker.specialty].filter(Boolean).join(' / ') || 'No title or specialty'}
+                  {!speaker.is_active && ' / Inactive'}
                 </p>
                 <p className="text-sm text-foreground/70 mt-2 line-clamp-2">{speaker.bio_notes || 'No bionotes yet.'}</p>
               </div>

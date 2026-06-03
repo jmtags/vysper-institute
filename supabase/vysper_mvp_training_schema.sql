@@ -692,6 +692,19 @@ create table if not exists public.training_speakers (
 create index if not exists idx_training_speakers_training_id on public.training_speakers(training_id);
 create index if not exists idx_training_speakers_speaker_id on public.training_speakers(speaker_id);
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'speaker-profiles',
+  'speaker-profiles',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
 alter table public.speakers enable row level security;
 alter table public.training_speakers enable row level security;
 
@@ -729,3 +742,28 @@ on public.training_speakers for all
 to authenticated
 using (public.is_admin())
 with check (public.is_admin());
+
+drop policy if exists "public_read_speaker_profile_images" on storage.objects;
+create policy "public_read_speaker_profile_images"
+on storage.objects for select
+to anon, authenticated
+using (bucket_id = 'speaker-profiles');
+
+drop policy if exists "admins_insert_speaker_profile_images" on storage.objects;
+create policy "admins_insert_speaker_profile_images"
+on storage.objects for insert
+to authenticated
+with check (bucket_id = 'speaker-profiles' and public.is_admin());
+
+drop policy if exists "admins_update_speaker_profile_images" on storage.objects;
+create policy "admins_update_speaker_profile_images"
+on storage.objects for update
+to authenticated
+using (bucket_id = 'speaker-profiles' and public.is_admin())
+with check (bucket_id = 'speaker-profiles' and public.is_admin());
+
+drop policy if exists "admins_delete_speaker_profile_images" on storage.objects;
+create policy "admins_delete_speaker_profile_images"
+on storage.objects for delete
+to authenticated
+using (bucket_id = 'speaker-profiles' and public.is_admin());

@@ -196,6 +196,40 @@ export async function setSpeakerActive(speakerId: string, isActive: boolean) {
   if (error) throw error;
 }
 
+export async function uploadSpeakerProfileImage(file: File) {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please upload an image file.');
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error('Speaker photo must be 5MB or smaller.');
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const safeName = file.name
+    .replace(/\.[^/.]+$/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 48) || 'speaker';
+  const filePath = `${Date.now()}-${safeName}.${extension}`;
+
+  const { error } = await supabase.storage
+    .from('speaker-profiles')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false
+    });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage
+    .from('speaker-profiles')
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+}
+
 export async function fetchTrainingSpeakerIds(trainingId: string) {
   const { data, error } = await supabase
     .from('training_speakers')
