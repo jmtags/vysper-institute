@@ -3,6 +3,7 @@ import { Button } from '../components/Button';
 import { Clock, Users, Monitor, CheckCircle, Star } from 'lucide-react';
 import { fetchTrainingBySlug, fetchTrainingDetails, Training, TrainingDetails } from '../lib/trainingData';
 import { trackWebsiteVisit } from '../lib/analytics';
+import { downloadTrainingBrochure } from '../lib/brochureDownload';
 
 interface TrainingDetailsPageProps {
   training: Partial<Training> & { slug?: string };
@@ -234,7 +235,8 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
                   variant="outline"
                   size="md"
                   className="w-full"
-                  onClick={() => {}}
+                  disabled={!details}
+                  onClick={() => details && downloadTrainingBrochure(details)}
                 >
                   Download Brochure
                 </Button>

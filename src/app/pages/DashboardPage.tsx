@@ -1,6 +1,7 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Button';
 import { BarChart3, FileText, GraduationCap, Mail, Shield, User, Users, Settings } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../auth/AuthContext';
 import { ContactMessage, ContactMessageStatus, fetchContactMessages, updateContactMessageStatus } from '../lib/contactMessages';
 import { AnalyticsVisit, fetchWebsiteVisits } from '../lib/analytics';
@@ -980,6 +981,28 @@ function AnalyticsPanel({ visits }: { visits: AnalyticsVisit[] }) {
     }, {}))
     .sort((a, b) => b.count - a.count);
 
+  const dailyVisits = Array.from({ length: 14 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (13 - index));
+    const key = date.toISOString().slice(0, 10);
+    const label = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+    return {
+      date: label,
+      visits: visits.filter((visit) => visit.created_at.slice(0, 10) === key).length
+    };
+  });
+
+  const pageChartData = pageTotals.slice(0, 6).map((row) => ({
+    name: row.title.length > 18 ? `${row.title.slice(0, 18)}...` : row.title,
+    visits: row.count
+  }));
+
+  const trainingChartData = trainingTotals.slice(0, 6).map((row) => ({
+    name: row.title.length > 18 ? `${row.title.slice(0, 18)}...` : row.title,
+    views: row.count
+  }));
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -988,6 +1011,44 @@ function AnalyticsPanel({ visits }: { visits: AnalyticsVisit[] }) {
         <AnalyticsStat label="Last 7 Days" value={visitsThisWeek} />
         <AnalyticsStat label="Unique Visitors" value={uniqueVisitors} />
       </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <AnalyticsChartCard title="Daily Visits">
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={dailyVisits} margin={{ top: 12, right: 12, bottom: 8, left: -18 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 23, 42, 0.12)" />
+              <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Line type="monotone" dataKey="visits" stroke="var(--primary)" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </AnalyticsChartCard>
+
+        <AnalyticsChartCard title="Page Visits">
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={pageChartData} margin={{ top: 12, right: 12, bottom: 8, left: -18 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 23, 42, 0.12)" />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Bar dataKey="visits" fill="var(--primary)" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </AnalyticsChartCard>
+      </div>
+
+      <AnalyticsChartCard title="Training Views">
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={trainingChartData} layout="vertical" margin={{ top: 12, right: 16, bottom: 8, left: 90 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 23, 42, 0.12)" />
+            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={96} />
+            <Tooltip />
+            <Bar dataKey="views" fill="var(--secondary)" radius={[0, 6, 6, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </AnalyticsChartCard>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <AnalyticsList title="Popular Pages" rows={pageTotals} emptyText="No page visits yet." />
@@ -1017,6 +1078,15 @@ function AnalyticsPanel({ visits }: { visits: AnalyticsVisit[] }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AnalyticsChartCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="bg-muted rounded-lg p-4">
+      <h3 className="mb-4 text-primary">{title}</h3>
+      {children}
     </div>
   );
 }
