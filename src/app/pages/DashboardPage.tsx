@@ -13,6 +13,7 @@ import {
   Training,
   TrainingCategory,
   updateProfileRole,
+  updateTrainingProposalReview,
   updateTrainingProposalStatus,
   upsertTraining
 } from '../lib/trainingData';
@@ -52,6 +53,12 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [categories, setCategories] = useState<TrainingCategory[]>([]);
   const [trainingForm, setTrainingForm] = useState(emptyTrainingForm);
+  const [quotationReview, setQuotationReview] = useState<any | null>(null);
+  const [reviewForm, setReviewForm] = useState({
+    status: 'submitted',
+    adminNotes: '',
+    declineReason: ''
+  });
   const [loading, setLoading] = useState(Boolean(user));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -135,6 +142,69 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       }
     } catch (err: any) {
       setError(err.message ?? 'Unable to open quotation request.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReviewProposal = async (proposalId: string) => {
+    setSaving(true);
+    setError('');
+
+    try {
+      const detail = await fetchTrainingProposalDetails(proposalId);
+      setQuotationReview(detail);
+      setReviewForm({
+        status: detail.proposal.status,
+        adminNotes: detail.proposal.admin_notes ?? '',
+        declineReason: detail.proposal.decline_reason ?? ''
+      });
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to open quotation review.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveReview = async (statusOverride?: string) => {
+    if (!quotationReview) return;
+
+    const nextStatus = (statusOverride ?? reviewForm.status) as any;
+    if (nextStatus === 'declined' && !reviewForm.declineReason.trim()) {
+      setError('Please add a decline reason before declining the quotation.');
+      return;
+    }
+
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      await updateTrainingProposalReview({
+        proposalId: quotationReview.proposal.id,
+        status: nextStatus,
+        adminNotes: reviewForm.adminNotes,
+        declineReason: reviewForm.declineReason
+      });
+
+      setProposals((current) => current.map((proposal) => proposal.id === quotationReview.proposal.id
+        ? {
+            ...proposal,
+            status: nextStatus,
+            admin_notes: reviewForm.adminNotes,
+            decline_reason: nextStatus === 'declined' ? reviewForm.declineReason : null
+          }
+        : proposal
+      ));
+      setQuotationReview(null);
+      setNotice(nextStatus === 'accepted'
+        ? 'Quotation request approved.'
+        : nextStatus === 'declined'
+          ? 'Quotation request declined.'
+          : 'Quotation review updated.'
+      );
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to save quotation review.');
     } finally {
       setSaving(false);
     }
@@ -343,6 +413,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   saving={saving}
                   onStatusChange={handleStatusChange}
                   onOpenProposal={handleOpenProposal}
+                  onReviewProposal={handleReviewProposal}
                   onDownloadProposal={handleDownloadProposal}
                   onBrowseTrainings={() => onNavigate('trainings')}
                 />
@@ -373,6 +444,17 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           </div>
         </div>
       </div>
+
+      {quotationReview && (
+        <QuotationReviewModal
+          detail={quotationReview}
+          form={reviewForm}
+          saving={saving}
+          onFormChange={setReviewForm}
+          onClose={() => setQuotationReview(null)}
+          onSave={handleSaveReview}
+        />
+      )}
     </div>
   );
 }
@@ -391,12 +473,13 @@ function AdminNavButton({ active, onClick, icon, label }: { active: boolean; onC
   );
 }
 
-function ProposalPanel({ proposals, isAdmin, saving, onStatusChange, onOpenProposal, onDownloadProposal, onBrowseTrainings }: {
+function ProposalPanel({ proposals, isAdmin, saving, onStatusChange, onOpenProposal, onReviewProposal, onDownloadProposal, onBrowseTrainings }: {
   proposals: any[];
   isAdmin: boolean;
   saving: boolean;
   onStatusChange: (proposalId: string, status: any) => void;
   onOpenProposal: (proposalId: string, edit: boolean) => void;
+  onReviewProposal: (proposalId: string) => void;
   onDownloadProposal: (proposalId: string) => void;
   onBrowseTrainings: () => void;
 }) {
@@ -426,8 +509,8 @@ function ProposalPanel({ proposals, isAdmin, saving, onStatusChange, onOpenPropo
           </div>
           <div className="flex flex-wrap items-center gap-3 xl:justify-end">
             <p className="text-primary" style={{ fontWeight: 700 }}>PHP {Number(proposal.total_price).toLocaleString()}</p>
-            <Button size="sm" variant="outline" onClick={() => onOpenProposal(proposal.id, false)} disabled={saving}>
-              View
+            <Button size="sm" variant="outline" onClick={() => isAdmin ? onReviewProposal(proposal.id) : onOpenProposal(proposal.id, false)} disabled={saving}>
+              {isAdmin ? 'Review' : 'View'}
             </Button>
             {(isAdmin || !['accepted', 'archived'].includes(proposal.status)) && (
               <Button size="sm" variant="outline" onClick={() => onOpenProposal(proposal.id, true)} disabled={saving}>
@@ -438,11 +521,151 @@ function ProposalPanel({ proposals, isAdmin, saving, onStatusChange, onOpenPropo
               Download
             </Button>
             {isAdmin ? (
+              <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm capitalize">
+                {proposal.status === 'accepted' ? 'approved' : proposal.status === 'submitted' ? 'pending review' : proposal.status}
+              </span>
+            ) : (
+              <StatusTimeline status={proposal.status} declineReason={proposal.decline_reason} compact />
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatusTimeline({ status, declineReason, compact = false }: { status: string; declineReason?: string | null; compact?: boolean }) {
+  const steps = [
+    { key: 'submitted', label: 'Pending Review' },
+    { key: 'accepted', label: 'Approved' },
+    { key: 'declined', label: 'Declined' },
+    { key: 'archived', label: 'Archived' }
+  ];
+  const currentIndex = steps.findIndex((step) => step.key === status);
+
+  if (compact) {
+    return (
+      <div className="min-w-[170px]">
+        <span className={`inline-block px-3 py-1 rounded-full text-sm capitalize ${
+          status === 'accepted'
+            ? 'bg-secondary/20 text-secondary'
+            : status === 'declined'
+              ? 'bg-destructive/10 text-destructive'
+              : 'bg-primary/10 text-primary'
+        }`}>
+          {status === 'accepted' ? 'Approved' : status === 'submitted' ? 'Pending Review' : status}
+        </span>
+        {status === 'declined' && declineReason && (
+          <p className="text-xs text-destructive mt-2 max-w-xs">{declineReason}</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+        {steps.map((step, index) => {
+          const active = step.key === status;
+          const complete = currentIndex >= index && status !== 'declined';
+          return (
+            <div key={step.key} className={`rounded-lg border p-3 text-sm ${
+              active
+                ? 'border-primary bg-primary/10 text-primary'
+                : complete
+                  ? 'border-secondary/30 bg-secondary/10 text-secondary'
+                  : 'border-border bg-muted text-foreground/60'
+            }`}>
+              {step.label}
+            </div>
+          );
+        })}
+      </div>
+      {status === 'declined' && declineReason && (
+        <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+          <p className="text-sm text-destructive" style={{ fontWeight: 600 }}>Decline Reason</p>
+          <p className="text-sm text-foreground/80 mt-1">{declineReason}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function QuotationReviewModal({ detail, form, saving, onFormChange, onClose, onSave }: {
+  detail: any;
+  form: { status: string; adminNotes: string; declineReason: string };
+  saving: boolean;
+  onFormChange: (form: { status: string; adminNotes: string; declineReason: string }) => void;
+  onClose: () => void;
+  onSave: (statusOverride?: string) => void;
+}) {
+  const proposal = detail.proposal;
+  const training = detail.training;
+
+  return (
+    <div className="fixed inset-0 z-[95] bg-black/45 flex items-center justify-center px-4 py-8">
+      <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-primary">Quotation Review</h2>
+            <p className="text-sm text-foreground/60">Quotation #{proposal.proposal_number}</p>
+          </div>
+          <button type="button" onClick={onClose} className="px-3 py-2 rounded-lg hover:bg-muted text-foreground/70">
+            Close
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <section>
+            <h3 className="text-primary mb-3">Client Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <InfoItem label="Organization" value={proposal.organization_name || 'Not provided'} />
+              <InfoItem label="Contact Person" value={proposal.contact_person || 'Not provided'} />
+              <InfoItem label="Email" value={proposal.contact_email || 'Not provided'} />
+              <InfoItem label="Phone" value={proposal.contact_phone || 'Not provided'} />
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-primary mb-3">Training Package</h3>
+            <div className="bg-muted rounded-lg p-4 space-y-2 text-sm">
+              <InfoRow label="Program" value={training.title} />
+              <InfoRow label="Participants" value={detail.formData.participants} />
+              <InfoRow label="Duration" value={detail.formData.duration} />
+              <InfoRow label="Delivery Mode" value={detail.formData.mode} />
+              <InfoRow label="Venue" value={detail.formData.venue === 'client-site' ? 'Client Site' : 'VYSPER Institute Training Center'} />
+              <InfoRow label="Preferred Date" value={detail.formData.preferredDate || 'To be confirmed'} />
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-primary mb-3">Add-ons and Pricing</h3>
+            <div className="bg-muted rounded-lg p-4 space-y-2 text-sm">
+              <InfoRow label="Base Training Fee" value={`PHP ${Number(detail.basePrice).toLocaleString()}`} />
+              {detail.selectedAddOns.length > 0 ? detail.selectedAddOns.map((addOn: any) => (
+                <InfoRow key={addOn.id} label={`${addOn.name} (${addOn.quantity}x)`} value={`PHP ${Number(addOn.totalPrice).toLocaleString()}`} />
+              )) : (
+                <p className="text-foreground/60">No paid add-ons selected.</p>
+              )}
+              <div className="pt-3 border-t border-border flex justify-between gap-4 text-base">
+                <span style={{ fontWeight: 600 }}>Total Price</span>
+                <span className="text-primary" style={{ fontWeight: 700 }}>PHP {Number(detail.totalPrice).toLocaleString()}</span>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-primary mb-3">User Status Timeline</h3>
+            <StatusTimeline status={form.status} declineReason={form.declineReason} />
+          </section>
+
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block mb-2">Status</label>
               <select
-                value={proposal.status}
-                disabled={saving}
-                onChange={(event) => onStatusChange(proposal.id, event.target.value)}
-                className="px-3 py-2 bg-card rounded-lg border border-border capitalize"
+                value={form.status}
+                onChange={(event) => onFormChange({ ...form, status: event.target.value })}
+                className="w-full px-3 py-2 bg-input-background rounded-lg border border-border"
               >
                 <option value="draft">Draft</option>
                 <option value="submitted">Pending Review</option>
@@ -450,14 +673,61 @@ function ProposalPanel({ proposals, isAdmin, saving, onStatusChange, onOpenPropo
                 <option value="declined">Declined</option>
                 <option value="archived">Archived</option>
               </select>
-            ) : (
-              <span className="px-3 py-1 bg-secondary/20 text-secondary rounded-full text-sm capitalize">
-                {proposal.status === 'accepted' ? 'approved' : proposal.status === 'submitted' ? 'pending review' : proposal.status}
-              </span>
-            )}
-          </div>
+            </div>
+            <div>
+              <label className="block mb-2">Admin Notes</label>
+              <textarea
+                value={form.adminNotes}
+                onChange={(event) => onFormChange({ ...form, adminNotes: event.target.value })}
+                rows={4}
+                className="w-full px-3 py-2 bg-input-background rounded-lg border border-border"
+                placeholder="Internal notes for the admin team"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block mb-2">Decline Reason</label>
+              <textarea
+                value={form.declineReason}
+                onChange={(event) => onFormChange({ ...form, declineReason: event.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 bg-input-background rounded-lg border border-border"
+                placeholder="Visible to the user when the quotation is declined"
+              />
+            </div>
+          </section>
         </div>
-      ))}
+
+        <div className="p-6 border-t border-border flex flex-wrap justify-end gap-3">
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={() => onSave('declined')} disabled={saving}>
+            Decline
+          </Button>
+          <Button type="button" variant="secondary" onClick={() => onSave('accepted')} disabled={saving}>
+            Approve
+          </Button>
+          <Button type="button" onClick={() => onSave()} disabled={saving}>
+            {saving ? 'Saving...' : 'Save Review'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-muted rounded-lg p-3">
+      <p className="text-xs text-foreground/60">{label}</p>
+      <p className="text-foreground/90">{value}</p>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span className="text-foreground/60">{label}</span>
+      <span style={{ fontWeight: 600 }}>{value}</span>
     </div>
   );
 }

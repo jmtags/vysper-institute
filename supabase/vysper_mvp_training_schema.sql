@@ -211,6 +211,8 @@ create table if not exists public.training_proposals (
   preferred_date date,
   base_price numeric(12,2) not null default 0 check (base_price >= 0),
   total_price numeric(12,2) not null default 0 check (total_price >= 0),
+  admin_notes text,
+  decline_reason text,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

@@ -262,7 +262,7 @@ export async function updateTrainingProposal(input: {
 export async function fetchTrainingProposals() {
   const { data, error } = await supabase
     .from('training_proposals')
-    .select('id, proposal_number, status, total_price, created_at, organization_name, contact_person, contact_email, user_id, training:trainings(title)')
+    .select('id, proposal_number, status, total_price, created_at, organization_name, contact_person, contact_email, user_id, admin_notes, decline_reason, training:trainings(title)')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -318,6 +318,24 @@ export async function updateTrainingProposalStatus(proposalId: string, status: '
     .from('training_proposals')
     .update({ status })
     .eq('id', proposalId);
+
+  if (error) throw error;
+}
+
+export async function updateTrainingProposalReview(input: {
+  proposalId: string;
+  status: 'draft' | 'submitted' | 'accepted' | 'declined' | 'archived';
+  adminNotes?: string;
+  declineReason?: string;
+}) {
+  const { error } = await supabase
+    .from('training_proposals')
+    .update({
+      status: input.status,
+      admin_notes: input.adminNotes || null,
+      decline_reason: input.status === 'declined' ? input.declineReason || null : null
+    })
+    .eq('id', input.proposalId);
 
   if (error) throw error;
 }

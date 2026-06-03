@@ -143,6 +143,13 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
           </div>
 
           <div className="p-8 space-y-8">
+            {proposal?.status && (
+              <section>
+                <h3 className="mb-4 pb-2 border-b border-border text-primary">Quotation Status</h3>
+                <QuotationStatusTimeline status={proposal.status} declineReason={proposal.decline_reason} />
+              </section>
+            )}
+
             {!userCanEdit && (
               <div className="bg-accent/10 border border-accent/20 rounded-lg p-4 text-sm text-foreground/80">
                 This quotation has been approved. Regular users can view and download it, but edits are locked.
@@ -266,6 +273,44 @@ function DetailRow({ label, value }: { label: string; value: string | number }) 
     <div className="flex justify-between gap-4">
       <span className="text-foreground/60">{label}:</span>
       <span style={{ fontWeight: 600 }}>{value}</span>
+    </div>
+  );
+}
+
+function QuotationStatusTimeline({ status, declineReason }: { status: string; declineReason?: string | null }) {
+  const steps = [
+    { key: 'submitted', label: 'Pending Review' },
+    { key: 'accepted', label: 'Approved' },
+    { key: 'declined', label: 'Declined' },
+    { key: 'archived', label: 'Archived' }
+  ];
+  const currentIndex = steps.findIndex((step) => step.key === status);
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+        {steps.map((step, index) => {
+          const active = step.key === status;
+          const complete = currentIndex >= index && status !== 'declined';
+          return (
+            <div key={step.key} className={`rounded-lg border p-3 text-sm ${
+              active
+                ? 'border-primary bg-primary/10 text-primary'
+                : complete
+                  ? 'border-secondary/30 bg-secondary/10 text-secondary'
+                  : 'border-border bg-muted text-foreground/60'
+            }`}>
+              {step.label}
+            </div>
+          );
+        })}
+      </div>
+      {status === 'declined' && declineReason && (
+        <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+          <p className="text-sm text-destructive" style={{ fontWeight: 600 }}>Decline Reason</p>
+          <p className="text-sm text-foreground/80 mt-1">{declineReason}</p>
+        </div>
+      )}
     </div>
   );
 }
