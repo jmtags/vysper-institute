@@ -252,7 +252,12 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
                     if (pdfWindow) {
                       pdfWindow.document.write('<p style="font-family: Arial, sans-serif; padding: 24px;">Preparing your brochure...</p>');
                     }
-                    void downloadTrainingBrochure(details, pdfWindow);
+                    void downloadTrainingBrochure(details, pdfWindow).catch((err) => {
+                      if (pdfWindow && !pdfWindow.closed) {
+                        pdfWindow.document.body.innerHTML = '<p style="font-family: Arial, sans-serif; padding: 24px;">Unable to prepare the brochure. Please try again.</p>';
+                      }
+                      console.error('Unable to download brochure.', err);
+                    });
                   }}
                 >
                   Download Brochure

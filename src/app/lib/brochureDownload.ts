@@ -36,41 +36,6 @@ function imageFormat(dataUrl: string) {
   return 'JPEG';
 }
 
-function positionToOffset(position?: string | null) {
-  const match = position?.match(/^(\d{1,3})% (\d{1,3})%$/);
-  return {
-    x: match ? Math.min(1, Math.max(0, Number(match[1]) / 100)) : 0.5,
-    y: match ? Math.min(1, Math.max(0, Number(match[2]) / 100)) : 0.5
-  };
-}
-
-async function addCoverImage(pdf: JsPDF, dataUrl: string, x: number, y: number, width: number, height: number, position?: string | null) {
-  const img = new Image();
-  img.src = dataUrl;
-  await img.decode().catch(() => undefined);
-
-  const sourceRatio = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : width / height;
-  const targetRatio = width / height;
-  const { x: offsetX, y: offsetY } = positionToOffset(position);
-  let drawWidth = width;
-  let drawHeight = height;
-  let drawX = x;
-  let drawY = y;
-
-  if (sourceRatio > targetRatio) {
-    drawWidth = height * sourceRatio;
-    drawX = x - (drawWidth - width) * offsetX;
-  } else {
-    drawHeight = width / sourceRatio;
-    drawY = y - (drawHeight - height) * offsetY;
-  }
-
-  pdf.saveGraphicsState();
-  pdf.rect(x, y, width, height, 'W');
-  pdf.addImage(dataUrl, imageFormat(dataUrl), drawX, drawY, drawWidth, drawHeight, undefined, 'FAST');
-  pdf.restoreGraphicsState();
-}
-
 function addWrappedText(
   pdf: JsPDF,
   text: string,
@@ -145,7 +110,6 @@ export async function downloadTrainingBrochure(training: TrainingDetails, target
   const pageWidth = pdf.internal.pageSize.getWidth();
 
   const logoUrl = await imageToDataUrl(BRAND_LOGO).catch(() => '');
-  const trainingImageUrl = training.image_url ? await imageToDataUrl(training.image_url).catch(() => '') : '';
 
   pdf.setFillColor(colors.pale);
   pdf.rect(0, 0, pageWidth, 297, 'F');
@@ -155,10 +119,6 @@ export async function downloadTrainingBrochure(training: TrainingDetails, target
   pdf.rect(0, 53, pageWidth, 4, 'F');
   pdf.setFillColor(colors.green);
   pdf.rect(0, 57, pageWidth, 3, 'F');
-
-  if (trainingImageUrl) {
-    await addCoverImage(pdf, trainingImageUrl, 144, 10, 48, 38, training.image_position);
-  }
 
   if (logoUrl) {
     pdf.setFillColor(colors.white);
@@ -249,26 +209,17 @@ export async function downloadTrainingBrochure(training: TrainingDetails, target
       pdf.setFillColor(colors.white);
       pdf.roundedRect(18, y - 6, 174, 34, 5, 5, 'F');
 
-      if (speaker.profile_image_url) {
-        const speakerImage = await imageToDataUrl(speaker.profile_image_url).catch(() => '');
-        if (speakerImage) {
-          pdf.addImage(speakerImage, imageFormat(speakerImage), 24, y - 1, 22, 22, undefined, 'FAST');
-        }
-      }
-
-      if (!speaker.profile_image_url) {
-        pdf.setFillColor(colors.softBlue);
-        pdf.roundedRect(24, y - 1, 22, 22, 4, 4, 'F');
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(10);
-        pdf.setTextColor(colors.navy);
-        pdf.text(
-          speaker.full_name.split(' ').map((part) => part[0]).join('').slice(0, 2),
-          35,
-          y + 12,
-          { align: 'center' }
-        );
-      }
+      pdf.setFillColor(colors.softBlue);
+      pdf.roundedRect(24, y - 1, 22, 22, 4, 4, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      pdf.setTextColor(colors.navy);
+      pdf.text(
+        speaker.full_name.split(' ').map((part) => part[0]).join('').slice(0, 2),
+        35,
+        y + 12,
+        { align: 'center' }
+      );
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(11);
