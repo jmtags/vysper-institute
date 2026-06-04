@@ -46,6 +46,8 @@ export interface TrainingAddOn {
   description: string | null;
   pricing_type: 'included' | 'fixed' | 'per_participant';
   unit_price: number;
+  is_active: boolean;
+  sort_order: number;
 }
 
 export interface Speaker {
@@ -314,15 +316,56 @@ export async function updateTrainingContent(trainingId: string, input: {
   if (insertError) throw insertError;
 }
 
-export async function fetchTrainingAddOns() {
-  const { data, error } = await supabase
+export async function fetchTrainingAddOns(includeInactive = false) {
+  let query = supabase
     .from('training_add_ons')
-    .select('id, key, name, description, pricing_type, unit_price')
-    .eq('is_active', true)
+    .select('id, key, name, description, pricing_type, unit_price, is_active, sort_order')
     .order('sort_order');
 
+  if (!includeInactive) {
+    query = query.eq('is_active', true);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []).map((item) => ({ ...item, unit_price: Number(item.unit_price) })) as TrainingAddOn[];
+}
+
+export async function upsertTrainingAddOn(input: {
+  id?: string;
+  key: string;
+  name: string;
+  description?: string;
+  pricingType: 'included' | 'fixed' | 'per_participant';
+  unitPrice: number;
+  sortOrder: number;
+  isActive: boolean;
+}) {
+  const payload = {
+    key: input.key,
+    name: input.name,
+    description: input.description || null,
+    pricing_type: input.pricingType,
+    unit_price: input.pricingType === 'included' ? 0 : input.unitPrice,
+    sort_order: input.sortOrder,
+    is_active: input.isActive
+  };
+
+  const query = input.id
+    ? supabase.from('training_add_ons').update(payload).eq('id', input.id)
+    : supabase.from('training_add_ons').insert(payload);
+
+  const { error } = await query;
+  if (error) throw error;
+}
+
+export async function setTrainingAddOnActive(addOnId: string, isActive: boolean) {
+  const { error } = await supabase
+    .from('training_add_ons')
+    .update({ is_active: isActive })
+    .eq('id', addOnId);
+
+  if (error) throw error;
 }
 
 export async function createTrainingProposal(input: {

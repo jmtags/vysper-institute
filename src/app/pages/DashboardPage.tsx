@@ -1,12 +1,13 @@
 import { ChangeEvent, FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Button';
-import { BarChart3, FileText, GraduationCap, Mail, Shield, User, Users, Settings } from 'lucide-react';
+import { BarChart3, Check, FileText, GraduationCap, Mail, Shield, User, Users, Settings } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../auth/AuthContext';
 import { ContactMessage, ContactMessageStatus, fetchContactMessages, updateContactMessageStatus } from '../lib/contactMessages';
 import { AnalyticsVisit, fetchWebsiteVisits } from '../lib/analytics';
 import {
   fetchProfiles,
+  fetchTrainingAddOns,
   fetchTrainingCategories,
   fetchTrainingProposalDetails,
   fetchTrainingProposals,
@@ -15,9 +16,11 @@ import {
   fetchTrainings,
   fetchSpeakers,
   setTrainingActive,
+  setTrainingAddOnActive,
   setSpeakerActive,
   Speaker,
   Training,
+  TrainingAddOn,
   TrainingCategory,
   updateTrainingContent,
   updateTrainingSpeakers,
@@ -25,6 +28,7 @@ import {
   updateTrainingProposalReview,
   updateTrainingProposalStatus,
   uploadSpeakerProfileImage,
+  upsertTrainingAddOn,
   upsertSpeaker,
   upsertTraining
 } from '../lib/trainingData';
@@ -35,7 +39,7 @@ interface DashboardPageProps {
   onNavigate: (page: string, data?: any) => void;
 }
 
-type AdminTab = 'proposals' | 'messages' | 'users' | 'trainings' | 'speakers' | 'analytics';
+type AdminTab = 'proposals' | 'messages' | 'users' | 'trainings' | 'add-ons' | 'speakers' | 'analytics';
 
 const emptyTrainingForm = {
   id: '',
@@ -68,6 +72,17 @@ const emptySpeakerForm = {
   isActive: true
 };
 
+const emptyAddOnForm = {
+  id: '',
+  key: '',
+  name: '',
+  description: '',
+  pricingType: 'fixed' as TrainingAddOn['pricing_type'],
+  unitPrice: 0,
+  sortOrder: 0,
+  isActive: true
+};
+
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
@@ -79,8 +94,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [categories, setCategories] = useState<TrainingCategory[]>([]);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [trainingAddOns, setTrainingAddOns] = useState<TrainingAddOn[]>([]);
   const [trainingForm, setTrainingForm] = useState(emptyTrainingForm);
   const [speakerForm, setSpeakerForm] = useState(emptySpeakerForm);
+  const [addOnForm, setAddOnForm] = useState(emptyAddOnForm);
   const [quotationReview, setQuotationReview] = useState<any | null>(null);
   const [reviewForm, setReviewForm] = useState({
     status: 'submitted',
@@ -98,17 +115,19 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     setError('');
 
     try {
-      const [proposalData, categoryData, trainingData, speakerData] = await Promise.all([
+      const [proposalData, categoryData, trainingData, speakerData, addOnData] = await Promise.all([
         fetchTrainingProposals(),
         fetchTrainingCategories(),
         fetchTrainings(isAdmin),
-        fetchSpeakers(isAdmin)
+        fetchSpeakers(isAdmin),
+        fetchTrainingAddOns(isAdmin)
       ]);
 
       setProposals(proposalData);
       setCategories(categoryData);
       setTrainings(trainingData);
       setSpeakers(speakerData);
+      setTrainingAddOns(addOnData);
 
       if (isAdmin) {
         const [profileData, messageData, visitData] = await Promise.all([
@@ -135,6 +154,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     if (!isAdmin) return 'My Training Quotations';
     if (activeTab === 'users') return 'User Management';
     if (activeTab === 'trainings') return 'Training Management';
+    if (activeTab === 'add-ons') return 'Add-ons Management';
     if (activeTab === 'speakers') return 'Speaker Management';
     if (activeTab === 'analytics') return 'Website Analytics';
     if (activeTab === 'messages') return 'Contact Messages';
@@ -454,6 +474,66 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     }
   };
 
+  const editAddOn = (addOn: TrainingAddOn) => {
+    setAddOnForm({
+      id: addOn.id,
+      key: addOn.key,
+      name: addOn.name,
+      description: addOn.description ?? '',
+      pricingType: addOn.pricing_type,
+      unitPrice: addOn.unit_price,
+      sortOrder: addOn.sort_order,
+      isActive: addOn.is_active
+    });
+    setActiveTab('add-ons');
+  };
+
+  const handleAddOnSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      await upsertTrainingAddOn({
+        id: addOnForm.id || undefined,
+        key: addOnForm.key.trim(),
+        name: addOnForm.name.trim(),
+        description: addOnForm.description,
+        pricingType: addOnForm.pricingType,
+        unitPrice: Number(addOnForm.unitPrice),
+        sortOrder: Number(addOnForm.sortOrder),
+        isActive: addOnForm.isActive
+      });
+
+      setTrainingAddOns(await fetchTrainingAddOns(true));
+      setAddOnForm(emptyAddOnForm);
+      setNotice(addOnForm.id ? 'Add-on updated.' : 'Add-on created.');
+      return true;
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to save add-on.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddOnActiveChange = async (addOnId: string, isActive: boolean) => {
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      await setTrainingAddOnActive(addOnId, isActive);
+      setTrainingAddOns(await fetchTrainingAddOns(true));
+      setNotice(isActive ? 'Add-on restored.' : 'Add-on deactivated.');
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to update add-on.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSpeakerImageUpload = async (file: File) => {
     setSaving(true);
     setNotice('');
@@ -527,6 +607,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   <AdminNavButton active={activeTab === 'messages'} onClick={() => setActiveTab('messages')} icon={<Mail className="w-4 h-4" />} label="Messages" />
                   <AdminNavButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<Users className="w-4 h-4" />} label="Users" />
                   <AdminNavButton active={activeTab === 'trainings'} onClick={() => setActiveTab('trainings')} icon={<Settings className="w-4 h-4" />} label="Trainings" />
+                  <AdminNavButton active={activeTab === 'add-ons'} onClick={() => setActiveTab('add-ons')} icon={<Check className="w-4 h-4" />} label="Add-ons" />
                   <AdminNavButton active={activeTab === 'speakers'} onClick={() => setActiveTab('speakers')} icon={<GraduationCap className="w-4 h-4" />} label="Speakers" />
                   <AdminNavButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} icon={<BarChart3 className="w-4 h-4" />} label="Analytics" />
                 </nav>
@@ -587,6 +668,19 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   onEdit={editTraining}
                   onCancel={() => setTrainingForm(emptyTrainingForm)}
                   onActiveChange={handleTrainingActiveChange}
+                />
+              )}
+
+              {!loading && !error && isAdmin && activeTab === 'add-ons' && (
+                <AddOnsAdminPanel
+                  addOns={trainingAddOns}
+                  form={addOnForm}
+                  saving={saving}
+                  onFormChange={setAddOnForm}
+                  onSubmit={handleAddOnSubmit}
+                  onEdit={editAddOn}
+                  onCancel={() => setAddOnForm(emptyAddOnForm)}
+                  onActiveChange={handleAddOnActiveChange}
                 />
               )}
 
@@ -1342,6 +1436,161 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
         {filteredTrainings.length === 0 && (
           <div className="bg-muted rounded-lg p-6 text-center">
             <p className="text-foreground/60">No trainings match your search.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AddOnsAdminPanel({ addOns, form, saving, onFormChange, onSubmit, onEdit, onCancel, onActiveChange }: {
+  addOns: TrainingAddOn[];
+  form: typeof emptyAddOnForm;
+  saving: boolean;
+  onFormChange: (form: typeof emptyAddOnForm) => void;
+  onSubmit: (event: FormEvent) => Promise<boolean>;
+  onEdit: (addOn: TrainingAddOn) => void;
+  onCancel: () => void;
+  onActiveChange: (addOnId: string, isActive: boolean) => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredAddOns = addOns.filter((addOn) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    return [
+      addOn.key,
+      addOn.name,
+      addOn.description,
+      addOn.pricing_type
+    ].some((value) => value?.toLowerCase().includes(query));
+  });
+
+  const handleAddAddOn = () => {
+    onCancel();
+    setShowForm(true);
+  };
+
+  const handleEditAddOn = (addOn: TrainingAddOn) => {
+    onEdit(addOn);
+    setShowForm(true);
+  };
+
+  const handleCancelForm = () => {
+    onCancel();
+    setShowForm(false);
+  };
+
+  const handleSubmitForm = async (event: FormEvent) => {
+    const saved = await onSubmit(event);
+    if (saved) setShowForm(false);
+  };
+
+  const formatPricing = (addOn: TrainingAddOn) => {
+    if (addOn.pricing_type === 'included') return 'Included';
+    if (addOn.pricing_type === 'per_participant') return `+PHP ${addOn.unit_price.toLocaleString()} per participant`;
+    return `+PHP ${addOn.unit_price.toLocaleString()}`;
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-primary">Add-ons Catalog</h3>
+          <p className="text-sm text-foreground/60">Manage quotation add-ons shown in the training request builder.</p>
+        </div>
+        <Button onClick={handleAddAddOn}>Add Add-on</Button>
+      </div>
+
+      <div>
+        <label className="block mb-2 text-sm">Search Add-ons</label>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search by name, key, description, or pricing type"
+          className="w-full px-4 py-3 bg-input-background rounded-lg border border-border"
+        />
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center px-4 py-8">
+          <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleSubmitForm} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2 flex items-center justify-between gap-4 border-b border-border pb-4 mb-2">
+                <div>
+                  <h3 className="text-primary">{form.id ? 'Edit Add-on' : 'Create Add-on'}</h3>
+                  <p className="text-sm text-foreground/60">Active add-ons are available in every training quotation request.</p>
+                </div>
+                <button type="button" onClick={handleCancelForm} className="px-3 py-2 rounded-lg hover:bg-muted text-foreground/70">
+                  Close
+                </button>
+              </div>
+
+              <Field label="Name" value={form.name} onChange={(value) => onFormChange({ ...form, name: value })} required />
+              <Field label="Key" value={form.key} onChange={(value) => onFormChange({ ...form, key: value.toLowerCase().replace(/[^a-z0-9_]+/g, '_') })} required />
+              <TextareaField label="Description" value={form.description} onChange={(value) => onFormChange({ ...form, description: value })} />
+
+              <div>
+                <label className="block mb-2">Pricing Type</label>
+                <select
+                  value={form.pricingType}
+                  onChange={(event) => {
+                    const pricingType = event.target.value as TrainingAddOn['pricing_type'];
+                    onFormChange({ ...form, pricingType, unitPrice: pricingType === 'included' ? 0 : form.unitPrice });
+                  }}
+                  className="w-full px-3 py-2 bg-input-background rounded-lg border border-border"
+                >
+                  <option value="included">Included</option>
+                  <option value="fixed">Fixed Price</option>
+                  <option value="per_participant">Per Participant</option>
+                </select>
+              </div>
+
+              <NumberField label="Unit Price" value={form.unitPrice} onChange={(value) => onFormChange({ ...form, unitPrice: value })} />
+              <NumberField label="Sort Order" value={form.sortOrder} onChange={(value) => onFormChange({ ...form, sortOrder: value })} />
+
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={form.isActive} onChange={(event) => onFormChange({ ...form, isActive: event.target.checked })} />
+                Active
+              </label>
+
+              <div className="md:col-span-2 flex gap-3 justify-end border-t border-border pt-4 mt-2">
+                <Button type="button" variant="outline" onClick={handleCancelForm}>Cancel</Button>
+                <Button type="submit" disabled={saving}>{saving ? 'Saving...' : form.id ? 'Update Add-on' : 'Create Add-on'}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {filteredAddOns.map((addOn) => (
+          <div key={addOn.id} className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 p-4 bg-muted rounded-lg">
+            <div>
+              <p style={{ fontWeight: 600 }}>{addOn.name}</p>
+              <p className="text-sm text-foreground/60">
+                {addOn.description || 'No description yet.'}
+              </p>
+              <p className="text-sm text-secondary mt-1">
+                {formatPricing(addOn)}
+                {!addOn.is_active && ' / Inactive'}
+              </p>
+              <p className="text-xs text-foreground/50 mt-1">Key: {addOn.key} / Sort: {addOn.sort_order}</p>
+            </div>
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <Button size="sm" variant="outline" onClick={() => handleEditAddOn(addOn)}>Edit</Button>
+              <Button size="sm" variant="ghost" onClick={() => onActiveChange(addOn.id, !addOn.is_active)} disabled={saving}>
+                {addOn.is_active ? 'Deactivate' : 'Restore'}
+              </Button>
+            </div>
+          </div>
+        ))}
+
+        {filteredAddOns.length === 0 && (
+          <div className="bg-muted rounded-lg p-6 text-center">
+            <p className="text-foreground/60">No add-ons match your search.</p>
           </div>
         )}
       </div>
