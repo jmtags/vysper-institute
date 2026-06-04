@@ -139,10 +139,14 @@ export function TrainingsListPage({ onNavigate }: TrainingsListPageProps) {
                       key={training.id}
                       className="bg-card rounded-xl shadow-sm border border-border overflow-hidden hover:shadow-md transition-shadow"
                     >
-                    <div className="bg-gradient-to-br from-primary/5 to-secondary/5 h-32 flex items-center justify-center">
-                      <div className="h-16 w-16 rounded-full border border-primary/15 bg-white/80 flex items-center justify-center shadow-sm">
-                        <TrainingIcon className="h-8 w-8 text-primary" strokeWidth={1.6} />
-                      </div>
+                    <div className="bg-gradient-to-br from-primary/5 to-secondary/5 h-36 flex items-center justify-center overflow-hidden">
+                      {training.image_url ? (
+                        <img src={training.image_url} alt={training.title} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-16 w-16 rounded-full border border-primary/15 bg-white/80 flex items-center justify-center shadow-sm">
+                          <TrainingIcon className="h-8 w-8 text-primary" strokeWidth={1.6} />
+                        </div>
+                      )}
                     </div>
                     <div className="p-6">
                       <span className="inline-block px-3 py-1 bg-primary/10 text-primary text-xs rounded-full mb-3">

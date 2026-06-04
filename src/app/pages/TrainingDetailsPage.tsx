@@ -58,18 +58,27 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
   return (
     <div className="min-h-screen bg-muted/30">
       <div className="bg-gradient-to-br from-primary/10 to-secondary/10 py-12 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center gap-2 text-sm text-foreground/60 mb-4">
-            <button onClick={() => onNavigate('trainings')} className="hover:text-primary">
-              Trainings
-            </button>
-            <span>/</span>
-            <span className="text-primary">{currentTraining.title ?? 'Training Details'}</span>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-center">
+          <div>
+            <div className="flex items-center gap-2 text-sm text-foreground/60 mb-4">
+              <button onClick={() => onNavigate('trainings')} className="hover:text-primary">
+                Trainings
+              </button>
+              <span>/</span>
+              <span className="text-primary">{currentTraining.title ?? 'Training Details'}</span>
+            </div>
+            <h1 className="mb-4 text-primary">{currentTraining.title ?? 'Training Details'}</h1>
+            <p className="text-xl text-foreground/80 max-w-3xl">
+              {currentTraining.description ?? 'Loading training information...'}
+            </p>
           </div>
-          <h1 className="mb-4 text-primary">{currentTraining.title ?? 'Training Details'}</h1>
-          <p className="text-xl text-foreground/80 max-w-3xl">
-            {currentTraining.description ?? 'Loading training information...'}
-          </p>
+          {currentTraining.image_url && (
+            <img
+              src={currentTraining.image_url}
+              alt={currentTraining.title ?? 'Training image'}
+              className="w-full h-64 rounded-xl object-cover shadow-sm border border-border bg-card"
+            />
+          )}
         </div>
       </div>
 

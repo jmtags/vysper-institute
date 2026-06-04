@@ -28,6 +28,7 @@ import {
   updateTrainingProposalReview,
   updateTrainingProposalStatus,
   uploadSpeakerProfileImage,
+  uploadTrainingImage,
   upsertTrainingAddOn,
   upsertSpeaker,
   upsertTraining
@@ -54,6 +55,7 @@ const emptyTrainingForm = {
   duration: 'Half-day',
   deliveryMode: 'Hybrid',
   imageIcon: 'brain',
+  imageUrl: '',
   minParticipants: 15,
   maxParticipants: 30,
   basePrice: 25000,
@@ -289,6 +291,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         preferredDate: detail.formData.preferredDate,
         basePrice: detail.basePrice,
         totalPrice: detail.totalPrice,
+        trainingImageUrl: detail.training.image_url,
         addOns: detail.selectedAddOns.map((addOn: any) => ({
           name: addOn.name,
           quantity: addOn.quantity,
@@ -364,6 +367,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       duration: training.duration,
       deliveryMode: training.delivery_mode,
       imageIcon: training.image_icon ?? 'brain',
+      imageUrl: training.image_url ?? '',
       minParticipants: training.min_participants,
       maxParticipants: training.max_participants,
       basePrice: training.base_price,
@@ -391,6 +395,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         duration: trainingForm.duration,
         deliveryMode: trainingForm.deliveryMode,
         imageIcon: trainingForm.imageIcon,
+        imageUrl: trainingForm.imageUrl,
         minParticipants: Number(trainingForm.minParticipants),
         maxParticipants: Number(trainingForm.maxParticipants),
         basePrice: Number(trainingForm.basePrice),
@@ -409,6 +414,23 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     } catch (err: any) {
       setError(err.message ?? 'Unable to save training.');
       return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTrainingImageUpload = async (file: File) => {
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      const imageUrl = await uploadTrainingImage(file);
+      setNotice('Training image uploaded. Save the training to keep this image.');
+      return imageUrl;
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to upload training image.');
+      return '';
     } finally {
       setSaving(false);
     }
@@ -587,7 +609,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
           <p className="text-foreground/70">Your {BRAND_NAME} {isAdmin ? 'admin console' : 'training workspace'}</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        {isAdmin && (
+          <AdminKpiCards proposals={proposals} messages={messages} />
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 mt-8">
           <aside className="lg:col-span-1">
             <div className="bg-card rounded-xl shadow-sm border border-border p-6 mb-6">
               <div className="flex items-center gap-4 mb-6">
@@ -668,6 +694,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   onEdit={editTraining}
                   onCancel={() => setTrainingForm(emptyTrainingForm)}
                   onActiveChange={handleTrainingActiveChange}
+                  onImageUpload={handleTrainingImageUpload}
                 />
               )}
 
@@ -727,6 +754,42 @@ function AdminNavButton({ active, onClick, icon, label }: { active: boolean; onC
       {icon}
       <span>{label}</span>
     </button>
+  );
+}
+
+function AdminKpiCards({ proposals, messages }: { proposals: any[]; messages: ContactMessage[] }) {
+  const pendingCount = proposals.filter((proposal) => proposal.status === 'submitted').length;
+  const approvedCount = proposals.filter((proposal) => proposal.status === 'accepted').length;
+  const estimatedRevenue = proposals
+    .filter((proposal) => proposal.status === 'accepted')
+    .reduce((total, proposal) => total + Number(proposal.total_price || 0), 0);
+  const newMessages = messages.filter((message) => message.status === 'new').length;
+  const trainingCounts = proposals.reduce<Record<string, number>>((counts, proposal) => {
+    const title = proposal.training?.title ?? 'Unassigned Training';
+    counts[title] = (counts[title] ?? 0) + 1;
+    return counts;
+  }, {});
+  const mostRequested = Object.entries(trainingCounts).sort((a, b) => b[1] - a[1])[0];
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <KpiCard label="Pending Quotations" value={pendingCount.toLocaleString()} />
+      <KpiCard label="Approved Quotations" value={approvedCount.toLocaleString()} />
+      <KpiCard label="Estimated Revenue" value={`PHP ${estimatedRevenue.toLocaleString()}`} />
+      <KpiCard label="New Messages" value={newMessages.toLocaleString()} />
+      <KpiCard label="Most Requested" value={mostRequested ? mostRequested[0] : 'No requests yet'} compact />
+    </div>
+  );
+}
+
+function KpiCard({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
+  return (
+    <div className="bg-card rounded-xl shadow-sm border border-border p-5 min-h-28">
+      <p className="text-sm text-foreground/60">{label}</p>
+      <p className={`${compact ? 'text-lg' : 'text-2xl'} text-primary mt-2`} style={{ fontWeight: 700 }}>
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -1246,7 +1309,7 @@ function AnalyticsList({ title, rows, emptyText }: {
   );
 }
 
-function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, onFormChange, onSubmit, onEdit, onCancel, onActiveChange }: {
+function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, onFormChange, onSubmit, onEdit, onCancel, onActiveChange, onImageUpload }: {
   categories: TrainingCategory[];
   trainings: Training[];
   speakers: Speaker[];
@@ -1257,9 +1320,11 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
   onEdit: (training: Training) => void;
   onCancel: () => void;
   onActiveChange: (trainingId: string, isActive: boolean) => void;
+  onImageUpload: (file: File) => Promise<string>;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const filteredTrainings = trainings.filter((training) => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
@@ -1292,6 +1357,19 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
   const handleSubmitForm = async (event: FormEvent) => {
     const saved = await onSubmit(event);
     if (saved) setShowForm(false);
+  };
+
+  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    const imageUrl = await onImageUpload(file);
+    if (imageUrl) {
+      onFormChange({ ...form, imageUrl });
+    }
+    event.target.value = '';
+    setUploadingImage(false);
   };
 
   return (
@@ -1364,6 +1442,31 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
               <Field label="Duration" value={form.duration} onChange={(value) => onFormChange({ ...form, duration: value })} required />
               <Field label="Delivery Mode" value={form.deliveryMode} onChange={(value) => onFormChange({ ...form, deliveryMode: value })} required />
               <Field label="Icon Key" value={form.imageIcon} onChange={(value) => onFormChange({ ...form, imageIcon: value })} />
+              <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4 items-start">
+                {form.imageUrl ? (
+                  <img src={form.imageUrl} alt="Training preview" className="h-28 w-full rounded-lg object-cover bg-muted border border-border" />
+                ) : (
+                  <div className="h-28 w-full rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-border">
+                    <GraduationCap className="w-9 h-9" />
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <label className="block">
+                    <span className="block mb-2">Upload Training Image</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      disabled={saving || uploadingImage}
+                      className="w-full px-3 py-2 bg-card rounded-lg border border-border"
+                    />
+                  </label>
+                  <Field label="Training Image URL" value={form.imageUrl} onChange={(value) => onFormChange({ ...form, imageUrl: value })} />
+                  <p className="text-xs text-foreground/60">
+                    {uploadingImage ? 'Uploading image...' : 'Upload a JPG, PNG, WebP, or GIF up to 6MB.'}
+                  </p>
+                </div>
+              </div>
               <NumberField label="Base Price" value={form.basePrice} onChange={(value) => onFormChange({ ...form, basePrice: value })} />
               <NumberField label="Min Participants" value={form.minParticipants} onChange={(value) => onFormChange({ ...form, minParticipants: value })} />
               <NumberField label="Max Participants" value={form.maxParticipants} onChange={(value) => onFormChange({ ...form, maxParticipants: value })} />

@@ -28,6 +28,7 @@ export interface ProposalDownloadData {
   preferredDate?: string;
   basePrice: number;
   totalPrice: number;
+  trainingImageUrl?: string | null;
   addOns: Array<{ name: string; quantity: number; totalPrice: number }>;
   adminNotes?: string;
   declineReason?: string;
@@ -43,6 +44,12 @@ async function imageToDataUrl(src: string) {
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
+}
+
+function imageFormat(dataUrl: string) {
+  if (dataUrl.startsWith('data:image/png')) return 'PNG';
+  if (dataUrl.startsWith('data:image/webp')) return 'WEBP';
+  return 'JPEG';
 }
 
 function filename(value: string) {
@@ -147,6 +154,7 @@ export async function downloadProposal(data: ProposalDownloadData, targetWindow?
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const logoUrl = await imageToDataUrl(BRAND_LOGO).catch(() => '');
+  const trainingImageUrl = data.trainingImageUrl ? await imageToDataUrl(data.trainingImageUrl).catch(() => '') : '';
 
   pdf.setFillColor(colors.pale);
   pdf.rect(0, 0, pageWidth, 297, 'F');
@@ -160,7 +168,11 @@ export async function downloadProposal(data: ProposalDownloadData, targetWindow?
   if (logoUrl) {
     pdf.setFillColor(colors.white);
     pdf.roundedRect(18, 12, 20, 20, 4, 4, 'F');
-    pdf.addImage(logoUrl, 'PNG', 20.5, 14.5, 15, 15, undefined, 'FAST');
+    pdf.addImage(logoUrl, imageFormat(logoUrl), 20.5, 14.5, 15, 15, undefined, 'FAST');
+  }
+
+  if (trainingImageUrl) {
+    pdf.addImage(trainingImageUrl, imageFormat(trainingImageUrl), 148, 12, 44, 34, undefined, 'FAST');
   }
 
   pdf.setFont('helvetica', 'bold');
@@ -269,6 +281,29 @@ export async function downloadProposal(data: ProposalDownloadData, targetWindow?
   pdf.text(money(data.totalPrice), 184, y + 16, { align: 'right' });
   y += 34;
 
+  y = ensureSpace(pdf, y, 58);
+  y = addSectionTitle(pdf, 'Inclusions', 18, y);
+  [
+    'Professional facilitator/s for the confirmed training schedule',
+    'Training design and session facilitation based on the selected program',
+    'Standard participant materials and certificates of completion',
+    'Coordination support before the training date'
+  ].forEach((item) => {
+    y = addWrappedText(pdf, `- ${item}`, 18, y, 174, { size: 9, lineHeight: 4.8 }) + 1;
+  });
+
+  y += 4;
+  y = ensureSpace(pdf, y, 46);
+  y = addSectionTitle(pdf, 'Terms and Conditions', 18, y);
+  [
+    'Quotation validity: 30 calendar days from the generated date.',
+    'Payment terms: 50% down payment upon confirmation and remaining balance on or before the training date.',
+    'Venue, meals, participant logistics, and third-party platform fees are excluded unless explicitly included in the quotation.',
+    'Schedule changes are subject to facilitator availability and written confirmation.'
+  ].forEach((item) => {
+    y = addWrappedText(pdf, `- ${item}`, 18, y, 174, { size: 9, lineHeight: 4.8 }) + 1;
+  });
+
   if (data.adminNotes || data.declineReason) {
     y = ensureSpace(pdf, y, 34);
     y = addSectionTitle(pdf, data.declineReason ? 'Quotation Notes' : 'Admin Notes', 18, y);
@@ -282,6 +317,20 @@ export async function downloadProposal(data: ProposalDownloadData, targetWindow?
   }
 
   y = ensureSpace(pdf, y + 6, 28);
+  y = addSectionTitle(pdf, 'Approval', 18, y);
+  pdf.setFillColor(colors.white);
+  pdf.roundedRect(18, y, 174, 32, 5, 5, 'F');
+  pdf.setDrawColor(colors.border);
+  pdf.line(28, y + 22, 86, y + 22);
+  pdf.line(112, y + 22, 182, y + 22);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(8);
+  pdf.setTextColor(colors.muted);
+  pdf.text('Authorized Representative', 28, y + 27);
+  pdf.text('Date', 112, y + 27);
+  y += 42;
+
+  y = ensureSpace(pdf, y, 28);
   pdf.setFillColor(colors.softBlue);
   pdf.roundedRect(18, y, 174, 24, 5, 5, 'F');
   pdf.setFont('helvetica', 'bold');

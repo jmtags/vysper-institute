@@ -19,6 +19,7 @@ export interface Training {
   delivery_mode: string;
   mode: string;
   image_icon: string | null;
+  image_url: string | null;
   image: string;
   min_participants: number;
   max_participants: number;
@@ -77,6 +78,7 @@ function mapTraining(row: any): Training {
     description: row.short_description,
     delivery_mode: row.delivery_mode,
     mode: row.delivery_mode,
+    image_url: row.image_url ?? null,
     image: iconMap[row.image_icon] ?? '🌿',
     category: row.category ?? null,
     base_price: Number(row.base_price),
@@ -239,6 +241,40 @@ export async function uploadSpeakerProfileImage(file: File) {
 
   const { data } = supabase.storage
     .from('speaker-profiles')
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+}
+
+export async function uploadTrainingImage(file: File) {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please upload an image file.');
+  }
+
+  if (file.size > 6 * 1024 * 1024) {
+    throw new Error('Training image must be 6MB or smaller.');
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const safeName = file.name
+    .replace(/\.[^/.]+$/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 48) || 'training';
+  const filePath = `${Date.now()}-${safeName}.${extension}`;
+
+  const { error } = await supabase.storage
+    .from('training-images')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false
+    });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage
+    .from('training-images')
     .getPublicUrl(filePath);
 
   return data.publicUrl;
@@ -601,6 +637,7 @@ export async function upsertTraining(input: {
   duration: string;
   deliveryMode: string;
   imageIcon: string;
+  imageUrl?: string;
   minParticipants: number;
   maxParticipants: number;
   basePrice: number;
@@ -616,6 +653,7 @@ export async function upsertTraining(input: {
     duration: input.duration,
     delivery_mode: input.deliveryMode,
     image_icon: input.imageIcon,
+    image_url: input.imageUrl || null,
     min_participants: input.minParticipants,
     max_participants: input.maxParticipants,
     base_price: input.basePrice,

@@ -30,6 +30,12 @@ async function imageToDataUrl(src: string) {
   });
 }
 
+function imageFormat(dataUrl: string) {
+  if (dataUrl.startsWith('data:image/png')) return 'PNG';
+  if (dataUrl.startsWith('data:image/webp')) return 'WEBP';
+  return 'JPEG';
+}
+
 function addWrappedText(
   pdf: JsPDF,
   text: string,
@@ -104,6 +110,7 @@ export async function downloadTrainingBrochure(training: TrainingDetails, target
   const pageWidth = pdf.internal.pageSize.getWidth();
 
   const logoUrl = await imageToDataUrl(BRAND_LOGO).catch(() => '');
+  const trainingImageUrl = training.image_url ? await imageToDataUrl(training.image_url).catch(() => '') : '';
 
   pdf.setFillColor(colors.pale);
   pdf.rect(0, 0, pageWidth, 297, 'F');
@@ -114,10 +121,14 @@ export async function downloadTrainingBrochure(training: TrainingDetails, target
   pdf.setFillColor(colors.green);
   pdf.rect(0, 57, pageWidth, 3, 'F');
 
+  if (trainingImageUrl) {
+    pdf.addImage(trainingImageUrl, imageFormat(trainingImageUrl), 144, 10, 48, 38, undefined, 'FAST');
+  }
+
   if (logoUrl) {
     pdf.setFillColor(colors.white);
     pdf.roundedRect(18, 10, 20, 20, 4, 4, 'F');
-    pdf.addImage(logoUrl, 'PNG', 20.5, 12.5, 15, 15, undefined, 'FAST');
+    pdf.addImage(logoUrl, imageFormat(logoUrl), 20.5, 12.5, 15, 15, undefined, 'FAST');
   }
 
   pdf.setFont('helvetica', 'bold');
@@ -206,7 +217,7 @@ export async function downloadTrainingBrochure(training: TrainingDetails, target
       if (speaker.profile_image_url) {
         const speakerImage = await imageToDataUrl(speaker.profile_image_url).catch(() => '');
         if (speakerImage) {
-          pdf.addImage(speakerImage, 'JPEG', 24, y - 1, 22, 22, undefined, 'FAST');
+          pdf.addImage(speakerImage, imageFormat(speakerImage), 24, y - 1, 22, 22, undefined, 'FAST');
         }
       }
 
