@@ -30,6 +30,25 @@ async function imageToDataUrl(src: string) {
   });
 }
 
+async function imageToDataUrlWithTimeout(src: string, timeoutMs = 2500) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(src, { signal: controller.signal });
+    const blob = await response.blob();
+
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 function imageFormat(dataUrl: string) {
   if (dataUrl.startsWith('data:image/png')) return 'PNG';
   if (dataUrl.startsWith('data:image/webp')) return 'WEBP';
@@ -209,17 +228,25 @@ export async function downloadTrainingBrochure(training: TrainingDetails, target
       pdf.setFillColor(colors.white);
       pdf.roundedRect(18, y - 6, 174, 34, 5, 5, 'F');
 
-      pdf.setFillColor(colors.softBlue);
-      pdf.roundedRect(24, y - 1, 22, 22, 4, 4, 'F');
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(10);
-      pdf.setTextColor(colors.navy);
-      pdf.text(
-        speaker.full_name.split(' ').map((part) => part[0]).join('').slice(0, 2),
-        35,
-        y + 12,
-        { align: 'center' }
-      );
+      const speakerImage = speaker.profile_image_url
+        ? await imageToDataUrlWithTimeout(speaker.profile_image_url).catch(() => '')
+        : '';
+
+      if (speakerImage) {
+        pdf.addImage(speakerImage, imageFormat(speakerImage), 24, y - 1, 22, 22, undefined, 'FAST');
+      } else {
+        pdf.setFillColor(colors.softBlue);
+        pdf.roundedRect(24, y - 1, 22, 22, 4, 4, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(10);
+        pdf.setTextColor(colors.navy);
+        pdf.text(
+          speaker.full_name.split(' ').map((part) => part[0]).join('').slice(0, 2),
+          35,
+          y + 12,
+          { align: 'center' }
+        );
+      }
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(11);
