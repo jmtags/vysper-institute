@@ -1,4 +1,5 @@
-import { Menu } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
+import { useState } from 'react';
 import { BRAND_LOGO, BRAND_NAME, BRAND_TAGLINE } from '../branding';
 import { useAuth } from '../auth/AuthContext';
 
@@ -12,6 +13,7 @@ interface NavbarProps {
 
 export function Navbar({ onNavigate, currentPage, onLogin, onSignUp, onLogout }: NavbarProps) {
   const { profile, user, signOut } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuItems = [
     { label: 'Trainings', page: 'trainings', href: '/trainings' },
     { label: 'Online Courses', page: 'courses', href: '/online-courses' },
@@ -29,7 +31,8 @@ export function Navbar({ onNavigate, currentPage, onLogin, onSignUp, onLogout }:
             href="/"
             onClick={(event) => {
               event.preventDefault();
-              onNavigate('home');
+                  setMobileMenuOpen(false);
+                  onNavigate('home');
             }}
             className="flex items-center gap-3 text-left"
             aria-label={`${BRAND_NAME} home`}
@@ -70,7 +73,7 @@ export function Navbar({ onNavigate, currentPage, onLogin, onSignUp, onLogout }:
                   href="/dashboard"
                   onClick={(event) => {
                     event.preventDefault();
-                    onNavigate('dashboard');
+                  onNavigate('dashboard');
                   }}
                   className="px-4 py-2 text-primary hover:bg-muted rounded-lg transition-colors"
                 >
@@ -98,10 +101,89 @@ export function Navbar({ onNavigate, currentPage, onLogin, onSignUp, onLogout }:
             )}
           </div>
 
-          <button className="md:hidden p-2">
-            <Menu className="w-6 h-6" />
+          <button
+            className="md:hidden p-2"
+            onClick={() => setMobileMenuOpen((open) => !open)}
+            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
+
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-border py-4">
+            <div className="flex flex-col gap-1">
+              {menuItems.map((item) => (
+                <a
+                  key={item.page}
+                  href={item.href}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setMobileMenuOpen(false);
+                    onNavigate(item.page);
+                  }}
+                  className={`px-3 py-3 rounded-lg ${
+                    currentPage === item.page
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-foreground/70 hover:bg-muted hover:text-primary'
+                  }`}
+                >
+                  {item.label}
+                </a>
+              ))}
+
+              <div className="border-t border-border mt-3 pt-3 flex flex-col gap-2">
+                {user ? (
+                  <>
+                    <a
+                      href="/dashboard"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setMobileMenuOpen(false);
+                        onNavigate('dashboard');
+                      }}
+                      className="px-3 py-3 rounded-lg text-primary hover:bg-muted"
+                    >
+                      {profile?.role === 'admin' ? 'Admin' : 'Dashboard'}
+                    </a>
+                    <button
+                      onClick={async () => {
+                        await signOut();
+                        setMobileMenuOpen(false);
+                        onLogout();
+                      }}
+                      className="px-3 py-3 bg-primary text-primary-foreground rounded-lg text-left"
+                    >
+                      Logout
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        onLogin();
+                      }}
+                      className="px-3 py-3 rounded-lg text-primary hover:bg-muted text-left"
+                    >
+                      Log in
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        onSignUp();
+                      }}
+                      className="px-3 py-3 bg-primary text-primary-foreground rounded-lg text-left"
+                    >
+                      Sign up
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </nav>
   );

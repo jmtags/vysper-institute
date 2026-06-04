@@ -237,7 +237,12 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
                   className="w-full"
                   disabled={!details}
                   onClick={() => {
-                    if (details) void downloadTrainingBrochure(details);
+                    if (!details) return;
+                    const pdfWindow = window.open('', '_blank');
+                    if (pdfWindow) {
+                      pdfWindow.document.write('<p style="font-family: Arial, sans-serif; padding: 24px;">Preparing your brochure...</p>');
+                    }
+                    void downloadTrainingBrochure(details, pdfWindow);
                   }}
                 >
                   Download Brochure

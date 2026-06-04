@@ -109,6 +109,26 @@ function ensureSpace(pdf: JsPDF, y: number, needed = 32) {
   return y;
 }
 
+function deliverPdf(pdf: JsPDF, outputFilename: string, targetWindow?: Window | null) {
+  const blob = pdf.output('blob');
+  const url = URL.createObjectURL(blob);
+
+  if (targetWindow && !targetWindow.closed) {
+    targetWindow.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = outputFilename;
+  link.target = '_blank';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 function addInfoRow(pdf: JsPDF, label: string, value: string, x: number, y: number, width = 84) {
   pdf.setFillColor(colors.white);
   pdf.roundedRect(x, y, width, 15, 3, 3, 'F');
@@ -122,7 +142,7 @@ function addInfoRow(pdf: JsPDF, label: string, value: string, x: number, y: numb
   pdf.text(pdf.splitTextToSize(value || 'Not provided', width - 8), x + 4, y + 11);
 }
 
-export async function downloadProposal(data: ProposalDownloadData) {
+export async function downloadProposal(data: ProposalDownloadData, targetWindow?: Window | null) {
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -274,5 +294,5 @@ export async function downloadProposal(data: ProposalDownloadData) {
   pdf.text(`For confirmation or adjustments, contact ${BRAND_EMAIL}.`, 26, y + 17);
 
   addFooter(pdf, 1);
-  pdf.save(`${filename(data.proposalNumber)}.pdf`);
+  deliverPdf(pdf, `${filename(data.proposalNumber)}.pdf`, targetWindow);
 }

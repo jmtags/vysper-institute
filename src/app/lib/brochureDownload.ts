@@ -78,7 +78,27 @@ function ensureSpace(pdf: JsPDF, y: number, needed = 32) {
   return y;
 }
 
-export async function downloadTrainingBrochure(training: TrainingDetails) {
+function deliverPdf(pdf: JsPDF, outputFilename: string, targetWindow?: Window | null) {
+  const blob = pdf.output('blob');
+  const url = URL.createObjectURL(blob);
+
+  if (targetWindow && !targetWindow.closed) {
+    targetWindow.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = outputFilename;
+  link.target = '_blank';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+export async function downloadTrainingBrochure(training: TrainingDetails, targetWindow?: Window | null) {
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -235,5 +255,5 @@ export async function downloadTrainingBrochure(training: TrainingDetails) {
 
   addPageFooter(pdf, 1);
 
-  pdf.save(`${slugify(training.slug || training.title)}-brochure.pdf`);
+  deliverPdf(pdf, `${slugify(training.slug || training.title)}-brochure.pdf`, targetWindow);
 }

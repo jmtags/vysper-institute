@@ -247,6 +247,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const handleDownloadProposal = async (proposalId: string) => {
     setSaving(true);
     setError('');
+    const pdfWindow = window.open('', '_blank');
+    if (pdfWindow) {
+      pdfWindow.document.write('<p style="font-family: Arial, sans-serif; padding: 24px;">Preparing your quotation...</p>');
+    }
 
     try {
       const detail = await fetchTrainingProposalDetails(proposalId);
@@ -272,8 +276,9 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         })),
         adminNotes: detail.proposal.admin_notes,
         declineReason: detail.proposal.decline_reason
-      });
+      }, pdfWindow);
     } catch (err: any) {
+      if (pdfWindow && !pdfWindow.closed) pdfWindow.close();
       setError(err.message ?? 'Unable to download quotation.');
     } finally {
       setSaving(false);
