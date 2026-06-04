@@ -36,6 +36,41 @@ function imageFormat(dataUrl: string) {
   return 'JPEG';
 }
 
+function positionToOffset(position?: string | null) {
+  const match = position?.match(/^(\d{1,3})% (\d{1,3})%$/);
+  return {
+    x: match ? Math.min(1, Math.max(0, Number(match[1]) / 100)) : 0.5,
+    y: match ? Math.min(1, Math.max(0, Number(match[2]) / 100)) : 0.5
+  };
+}
+
+async function addCoverImage(pdf: JsPDF, dataUrl: string, x: number, y: number, width: number, height: number, position?: string | null) {
+  const img = new Image();
+  img.src = dataUrl;
+  await img.decode().catch(() => undefined);
+
+  const sourceRatio = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : width / height;
+  const targetRatio = width / height;
+  const { x: offsetX, y: offsetY } = positionToOffset(position);
+  let drawWidth = width;
+  let drawHeight = height;
+  let drawX = x;
+  let drawY = y;
+
+  if (sourceRatio > targetRatio) {
+    drawWidth = height * sourceRatio;
+    drawX = x - (drawWidth - width) * offsetX;
+  } else {
+    drawHeight = width / sourceRatio;
+    drawY = y - (drawHeight - height) * offsetY;
+  }
+
+  pdf.saveGraphicsState();
+  pdf.rect(x, y, width, height, 'W');
+  pdf.addImage(dataUrl, imageFormat(dataUrl), drawX, drawY, drawWidth, drawHeight, undefined, 'FAST');
+  pdf.restoreGraphicsState();
+}
+
 function addWrappedText(
   pdf: JsPDF,
   text: string,
@@ -122,7 +157,7 @@ export async function downloadTrainingBrochure(training: TrainingDetails, target
   pdf.rect(0, 57, pageWidth, 3, 'F');
 
   if (trainingImageUrl) {
-    pdf.addImage(trainingImageUrl, imageFormat(trainingImageUrl), 144, 10, 48, 38, undefined, 'FAST');
+    await addCoverImage(pdf, trainingImageUrl, 144, 10, 48, 38, training.image_position);
   }
 
   if (logoUrl) {

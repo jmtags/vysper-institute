@@ -2,7 +2,8 @@
 -- Admins can upload/manage training images. Public users can view images on training pages.
 
 alter table public.trainings
-add column if not exists image_url text;
+add column if not exists image_url text,
+add column if not exists image_position text not null default 'center center';
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (

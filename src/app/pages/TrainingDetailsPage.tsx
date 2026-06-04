@@ -77,6 +77,7 @@ export function TrainingDetailsPage({ training, onNavigate }: TrainingDetailsPag
               src={currentTraining.image_url}
               alt={currentTraining.title ?? 'Training image'}
               className="w-full h-64 rounded-xl object-cover shadow-sm border border-border bg-card"
+              style={{ objectPosition: currentTraining.image_position ?? 'center center' }}
             />
           )}
         </div>

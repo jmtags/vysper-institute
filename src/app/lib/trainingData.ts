@@ -20,6 +20,7 @@ export interface Training {
   mode: string;
   image_icon: string | null;
   image_url: string | null;
+  image_position: string | null;
   image: string;
   min_participants: number;
   max_participants: number;
@@ -79,6 +80,7 @@ function mapTraining(row: any): Training {
     delivery_mode: row.delivery_mode,
     mode: row.delivery_mode,
     image_url: row.image_url ?? null,
+    image_position: row.image_position ?? 'center center',
     image: iconMap[row.image_icon] ?? '🌿',
     category: row.category ?? null,
     base_price: Number(row.base_price),
@@ -638,6 +640,7 @@ export async function upsertTraining(input: {
   deliveryMode: string;
   imageIcon: string;
   imageUrl?: string;
+  imagePosition?: string;
   minParticipants: number;
   maxParticipants: number;
   basePrice: number;
@@ -654,6 +657,7 @@ export async function upsertTraining(input: {
     delivery_mode: input.deliveryMode,
     image_icon: input.imageIcon,
     image_url: input.imageUrl || null,
+    image_position: input.imagePosition || 'center center',
     min_participants: input.minParticipants,
     max_participants: input.maxParticipants,
     base_price: input.basePrice,

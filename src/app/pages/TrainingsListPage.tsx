@@ -141,7 +141,12 @@ export function TrainingsListPage({ onNavigate }: TrainingsListPageProps) {
                     >
                     <div className="bg-gradient-to-br from-primary/5 to-secondary/5 h-36 flex items-center justify-center overflow-hidden">
                       {training.image_url ? (
-                        <img src={training.image_url} alt={training.title} className="h-full w-full object-cover" />
+                        <img
+                          src={training.image_url}
+                          alt={training.title}
+                          className="h-full w-full object-cover"
+                          style={{ objectPosition: training.image_position ?? 'center center' }}
+                        />
                       ) : (
                         <div className="h-16 w-16 rounded-full border border-primary/15 bg-white/80 flex items-center justify-center shadow-sm">
                           <TrainingIcon className="h-8 w-8 text-primary" strokeWidth={1.6} />

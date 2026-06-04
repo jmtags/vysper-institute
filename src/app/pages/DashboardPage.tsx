@@ -56,6 +56,7 @@ const emptyTrainingForm = {
   deliveryMode: 'Hybrid',
   imageIcon: 'brain',
   imageUrl: '',
+  imagePosition: 'center center',
   minParticipants: 15,
   maxParticipants: 30,
   basePrice: 25000,
@@ -292,6 +293,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         basePrice: detail.basePrice,
         totalPrice: detail.totalPrice,
         trainingImageUrl: detail.training.image_url,
+        trainingImagePosition: detail.training.image_position,
         addOns: detail.selectedAddOns.map((addOn: any) => ({
           name: addOn.name,
           quantity: addOn.quantity,
@@ -368,6 +370,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       deliveryMode: training.delivery_mode,
       imageIcon: training.image_icon ?? 'brain',
       imageUrl: training.image_url ?? '',
+      imagePosition: training.image_position ?? 'center center',
       minParticipants: training.min_participants,
       maxParticipants: training.max_participants,
       basePrice: training.base_price,
@@ -396,6 +399,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         deliveryMode: trainingForm.deliveryMode,
         imageIcon: trainingForm.imageIcon,
         imageUrl: trainingForm.imageUrl,
+        imagePosition: trainingForm.imagePosition,
         minParticipants: Number(trainingForm.minParticipants),
         maxParticipants: Number(trainingForm.maxParticipants),
         basePrice: Number(trainingForm.basePrice),
@@ -1372,6 +1376,13 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
     setUploadingImage(false);
   };
 
+  const imagePositionParts = form.imagePosition.match(/^(\d{1,3})% (\d{1,3})%$/);
+  const imagePositionX = imagePositionParts ? Number(imagePositionParts[1]) : 50;
+  const imagePositionY = imagePositionParts ? Number(imagePositionParts[2]) : 50;
+  const setImagePosition = (x: number, y: number) => {
+    onFormChange({ ...form, imagePosition: `${x}% ${y}%` });
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1444,7 +1455,12 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
               <Field label="Icon Key" value={form.imageIcon} onChange={(value) => onFormChange({ ...form, imageIcon: value })} />
               <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4 items-start">
                 {form.imageUrl ? (
-                  <img src={form.imageUrl} alt="Training preview" className="h-28 w-full rounded-lg object-cover bg-muted border border-border" />
+                  <img
+                    src={form.imageUrl}
+                    alt="Training preview"
+                    className="h-28 w-full rounded-lg object-cover bg-muted border border-border"
+                    style={{ objectPosition: form.imagePosition }}
+                  />
                 ) : (
                   <div className="h-28 w-full rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-border">
                     <GraduationCap className="w-9 h-9" />
@@ -1462,6 +1478,51 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
                     />
                   </label>
                   <Field label="Training Image URL" value={form.imageUrl} onChange={(value) => onFormChange({ ...form, imageUrl: value })} />
+                  {form.imageUrl && (
+                    <div className="space-y-3 rounded-lg border border-border bg-input-background p-3">
+                      <div>
+                        <label className="block mb-2 text-sm">Quick Position</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            ['Top', 50, 0],
+                            ['Center', 50, 50],
+                            ['Bottom', 50, 100]
+                          ].map(([label, x, y]) => (
+                            <button
+                              key={String(label)}
+                              type="button"
+                              onClick={() => setImagePosition(Number(x), Number(y))}
+                              className="px-3 py-2 rounded-lg border border-border bg-card hover:bg-muted text-sm"
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block mb-1 text-sm">Horizontal Position</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={imagePositionX}
+                          onChange={(event) => setImagePosition(Number(event.target.value), imagePositionY)}
+                          className="w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="block mb-1 text-sm">Vertical Position</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={imagePositionY}
+                          onChange={(event) => setImagePosition(imagePositionX, Number(event.target.value))}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
+                  )}
                   <p className="text-xs text-foreground/60">
                     {uploadingImage ? 'Uploading image...' : 'Upload a JPG, PNG, WebP, or GIF up to 6MB.'}
                   </p>
