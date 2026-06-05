@@ -82,6 +82,7 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
 
     if (!user) {
       setMessage('Please log in or create an account before submitting your quotation request.');
+      setAuthMode('login');
       return;
     }
 
