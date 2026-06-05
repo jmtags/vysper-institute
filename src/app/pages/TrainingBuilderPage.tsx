@@ -16,6 +16,7 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
   const [step, setStep] = useState(1);
   const [addOns, setAddOns] = useState<TrainingAddOn[]>([]);
   const [loadingAddOns, setLoadingAddOns] = useState(true);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     participants: input.formData?.participants ?? '',
     duration: input.formData?.duration ?? training.duration,
@@ -79,7 +80,44 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
     return calculateBasePrice() + selectedAddOns.reduce((total, addOn) => total + addOn.totalPrice, 0);
   };
 
+  const today = new Date().toISOString().slice(0, 10);
+
+  const validateTrainingDetails = () => {
+    const errors: Record<string, string> = {};
+    const participantCount = Number(formData.participants);
+
+    if (!formData.participants) {
+      errors.participants = 'Please enter the expected number of participants.';
+    } else if (!Number.isInteger(participantCount) || participantCount <= 0) {
+      errors.participants = 'Participants must be a whole number greater than 0.';
+    }
+
+    if (!formData.duration) errors.duration = 'Please select a preferred duration.';
+    if (!formData.mode) errors.mode = 'Please select a mode of delivery.';
+    if (!formData.venue) errors.venue = 'Please select a venue option.';
+
+    if (!formData.preferredDate) {
+      errors.preferredDate = 'Please select a preferred training date.';
+    } else if (formData.preferredDate < today) {
+      errors.preferredDate = 'Preferred date cannot be in the past.';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleContinue = () => {
+    if (step === 1 && !validateTrainingDetails()) return;
+    setValidationErrors({});
+    setStep(step + 1);
+  };
+
   const handleGenerateProposal = () => {
+    if (!validateTrainingDetails()) {
+      setStep(1);
+      return;
+    }
+
     onNavigate('proposal-preview', {
       training,
       proposal: existingProposal,
@@ -133,11 +171,17 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
                 <label className="block mb-2">Number of Participants</label>
                 <input
                   type="number"
+                  min="1"
+                  required
                   value={formData.participants}
-                  onChange={(event) => setFormData({ ...formData, participants: event.target.value })}
+                  onChange={(event) => {
+                    setFormData({ ...formData, participants: event.target.value });
+                    setValidationErrors({ ...validationErrors, participants: '' });
+                  }}
                   placeholder="e.g., 25"
-                  className="w-full px-4 py-3 bg-input-background rounded-lg border border-border"
+                  className={`w-full px-4 py-3 bg-input-background rounded-lg border ${validationErrors.participants ? 'border-destructive' : 'border-border'}`}
                 />
+                {validationErrors.participants && <p className="text-sm text-destructive mt-2">{validationErrors.participants}</p>}
               </div>
 
               <div>
@@ -150,13 +194,17 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
                         name="duration"
                         value={duration}
                         checked={formData.duration === duration}
-                        onChange={(event) => setFormData({ ...formData, duration: event.target.value })}
+                        onChange={(event) => {
+                          setFormData({ ...formData, duration: event.target.value });
+                          setValidationErrors({ ...validationErrors, duration: '' });
+                        }}
                         className="w-4 h-4"
                       />
                       <span>{duration}</span>
                     </label>
                   ))}
                 </div>
+                {validationErrors.duration && <p className="text-sm text-destructive mt-2">{validationErrors.duration}</p>}
               </div>
 
               <div>
@@ -169,13 +217,17 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
                         name="mode"
                         value={mode}
                         checked={formData.mode === mode}
-                        onChange={(event) => setFormData({ ...formData, mode: event.target.value })}
+                        onChange={(event) => {
+                          setFormData({ ...formData, mode: event.target.value });
+                          setValidationErrors({ ...validationErrors, mode: '' });
+                        }}
                         className="w-4 h-4"
                       />
                       <span>{mode}</span>
                     </label>
                   ))}
                 </div>
+                {validationErrors.mode && <p className="text-sm text-destructive mt-2">{validationErrors.mode}</p>}
               </div>
 
               <div>
@@ -187,7 +239,10 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
                       name="venue"
                       value="client-site"
                       checked={formData.venue === 'client-site'}
-                      onChange={(event) => setFormData({ ...formData, venue: event.target.value })}
+                      onChange={(event) => {
+                        setFormData({ ...formData, venue: event.target.value });
+                        setValidationErrors({ ...validationErrors, venue: '' });
+                      }}
                       className="w-4 h-4"
                     />
                     <span>Client Site</span>
@@ -198,22 +253,32 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
                       name="venue"
                       value="vysper-site"
                       checked={formData.venue === 'vysper-site'}
-                      onChange={(event) => setFormData({ ...formData, venue: event.target.value })}
+                      onChange={(event) => {
+                        setFormData({ ...formData, venue: event.target.value });
+                        setValidationErrors({ ...validationErrors, venue: '' });
+                      }}
                       className="w-4 h-4"
                     />
                     <span>{BRAND_TRAINING_CENTER}</span>
                   </label>
                 </div>
+                {validationErrors.venue && <p className="text-sm text-destructive mt-2">{validationErrors.venue}</p>}
               </div>
 
               <div>
                 <label className="block mb-2">Preferred Date</label>
                 <input
                   type="date"
+                  min={today}
+                  required
                   value={formData.preferredDate}
-                  onChange={(event) => setFormData({ ...formData, preferredDate: event.target.value })}
-                  className="w-full px-4 py-3 bg-input-background rounded-lg border border-border"
+                  onChange={(event) => {
+                    setFormData({ ...formData, preferredDate: event.target.value });
+                    setValidationErrors({ ...validationErrors, preferredDate: '' });
+                  }}
+                  className={`w-full px-4 py-3 bg-input-background rounded-lg border ${validationErrors.preferredDate ? 'border-destructive' : 'border-border'}`}
                 />
+                {validationErrors.preferredDate && <p className="text-sm text-destructive mt-2">{validationErrors.preferredDate}</p>}
               </div>
             </div>
           )}
@@ -321,7 +386,7 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
             Back
           </Button>
           {step < 3 ? (
-            <Button onClick={() => setStep(step + 1)}>
+            <Button onClick={handleContinue}>
               Continue
             </Button>
           ) : (

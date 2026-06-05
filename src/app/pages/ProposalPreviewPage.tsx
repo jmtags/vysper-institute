@@ -5,6 +5,7 @@ import { BRAND_LOGO, BRAND_NAME, BRAND_PROPOSAL_PREFIX, BRAND_TAGLINE, BRAND_TRA
 import { useAuth } from '../auth/AuthContext';
 import { createTrainingProposal, updateTrainingProposal } from '../lib/trainingData';
 import { downloadProposal } from '../lib/proposalDownload';
+import { AuthModal } from '../components/AuthModal';
 
 interface ProposalPreviewPageProps {
   data: any;
@@ -31,6 +32,8 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
   });
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [authMode, setAuthMode] = useState<'login' | 'signup' | null>(null);
   const [savedProposalNumber, setSavedProposalNumber] = useState(proposal?.proposal_number ?? '');
 
   const downloadData = useMemo(() => ({
@@ -54,9 +57,31 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
     }))
   }), [basePrice, clientInfo, formData, proposalNumber, savedProposalNumber, selectedAddOns, totalPrice, training.title]);
 
+  const validateClientInfo = () => {
+    const errors: Record<string, string> = {};
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!clientInfo.organizationName.trim()) errors.organizationName = 'Please enter your organization or company name.';
+    if (!clientInfo.contactPerson.trim()) errors.contactPerson = 'Please enter the contact person for this quotation.';
+    if (!clientInfo.contactEmail.trim()) {
+      errors.contactEmail = 'Please enter an email address.';
+    } else if (!emailPattern.test(clientInfo.contactEmail)) {
+      errors.contactEmail = 'Please enter a valid email address.';
+    }
+    if (!clientInfo.contactPhone.trim()) errors.contactPhone = 'Please enter a contact phone number.';
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmitProposal = async () => {
+    if (!validateClientInfo()) {
+      setMessage('Please complete the required client information before submitting.');
+      return;
+    }
+
     if (!user) {
-      setMessage('Please login or create an account before submitting a quotation request.');
+      setMessage('Please log in or create an account before submitting your quotation request.');
       return;
     }
 
@@ -156,13 +181,38 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
               </div>
             )}
 
+            {!user && (
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-5">
+                <h3 className="text-primary mb-2">Account Required</h3>
+                <p className="text-sm text-foreground/75 mb-4">
+                  To protect your quotation request and let you track its status, please log in or create an account before submitting.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button type="button" onClick={() => setAuthMode('login')}>Log in</Button>
+                  <Button type="button" variant="outline" onClick={() => setAuthMode('signup')}>Create Account</Button>
+                </div>
+              </div>
+            )}
+
             <section>
               <h3 className="mb-4 pb-2 border-b border-border text-primary">Client Information</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                <ClientInput label="Organization Name" value={clientInfo.organizationName} disabled={!userCanEdit} onChange={(value) => setClientInfo({ ...clientInfo, organizationName: value })} />
-                <ClientInput label="Contact Person" value={clientInfo.contactPerson} disabled={!userCanEdit} onChange={(value) => setClientInfo({ ...clientInfo, contactPerson: value })} />
-                <ClientInput label="Email Address" type="email" value={clientInfo.contactEmail} disabled={!userCanEdit} onChange={(value) => setClientInfo({ ...clientInfo, contactEmail: value })} />
-                <ClientInput label="Phone Number" type="tel" value={clientInfo.contactPhone} disabled={!userCanEdit} onChange={(value) => setClientInfo({ ...clientInfo, contactPhone: value })} />
+                <ClientInput label="Organization Name" value={clientInfo.organizationName} error={validationErrors.organizationName} disabled={!userCanEdit} onChange={(value) => {
+                  setClientInfo({ ...clientInfo, organizationName: value });
+                  setValidationErrors({ ...validationErrors, organizationName: '' });
+                }} />
+                <ClientInput label="Contact Person" value={clientInfo.contactPerson} error={validationErrors.contactPerson} disabled={!userCanEdit} onChange={(value) => {
+                  setClientInfo({ ...clientInfo, contactPerson: value });
+                  setValidationErrors({ ...validationErrors, contactPerson: '' });
+                }} />
+                <ClientInput label="Email Address" type="email" value={clientInfo.contactEmail} error={validationErrors.contactEmail} disabled={!userCanEdit} onChange={(value) => {
+                  setClientInfo({ ...clientInfo, contactEmail: value });
+                  setValidationErrors({ ...validationErrors, contactEmail: '' });
+                }} />
+                <ClientInput label="Phone Number" type="tel" value={clientInfo.contactPhone} error={validationErrors.contactPhone} disabled={!userCanEdit} onChange={(value) => {
+                  setClientInfo({ ...clientInfo, contactPhone: value });
+                  setValidationErrors({ ...validationErrors, contactPhone: '' });
+                }} />
               </div>
             </section>
 
@@ -243,6 +293,17 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
           )}
         </div>
       </div>
+      {authMode && (
+        <AuthModal
+          mode={authMode}
+          onClose={() => setAuthMode(null)}
+          onModeChange={setAuthMode}
+          onAuthenticated={() => {
+            setAuthMode(null);
+            setMessage('You are now signed in. Please review your details, then submit your quotation request.');
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -253,6 +314,7 @@ function ClientInput({ label, value, onChange, disabled, type = 'text' }: {
   onChange: (value: string) => void;
   disabled: boolean;
   type?: string;
+  error?: string;
 }) {
   return (
     <div>
@@ -261,9 +323,11 @@ function ClientInput({ label, value, onChange, disabled, type = 'text' }: {
         type={type}
         value={value}
         disabled={disabled}
+        required
         onChange={(event) => onChange(event.target.value)}
-        className="w-full px-3 py-2 bg-input-background rounded-lg border border-border disabled:opacity-70"
+        className={`w-full px-3 py-2 bg-input-background rounded-lg border ${error ? 'border-destructive' : 'border-border'} disabled:opacity-70`}
       />
+      {error && <p className="text-xs text-destructive mt-1">{error}</p>}
     </div>
   );
 }
