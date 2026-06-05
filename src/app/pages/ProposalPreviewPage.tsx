@@ -308,7 +308,7 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
   );
 }
 
-function ClientInput({ label, value, onChange, disabled, type = 'text' }: {
+function ClientInput({ label, value, onChange, disabled, type = 'text', error }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
