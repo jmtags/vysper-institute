@@ -25,8 +25,11 @@ export interface ProposalDownloadData {
   duration: string;
   deliveryMode: string;
   venue: string;
+  venueAddress?: string;
+  distanceKm?: string | number;
   preferredDate?: string;
   basePrice: number;
+  transportFee?: number;
   totalPrice: number;
   trainingImageUrl?: string | null;
   trainingImagePosition?: string | null;
@@ -267,6 +270,11 @@ export async function downloadProposal(data: ProposalDownloadData, targetWindow?
   y += 19;
   addInfoRow(pdf, 'Preferred Date', data.preferredDate || 'To be confirmed', 18, y, 84);
   addInfoRow(pdf, 'Participants', String(data.participants), 108, y, 84);
+  if (data.venue === 'client-site') {
+    y += 19;
+    addInfoRow(pdf, 'Client Site Address', data.venueAddress || 'Not provided', 18, y, 114);
+    addInfoRow(pdf, 'Distance', `${data.distanceKm || 0} km`, 138, y, 54);
+  }
 
   y += 32;
   y = ensureSpace(pdf, y, 64);
@@ -282,7 +290,8 @@ export async function downloadProposal(data: ProposalDownloadData, targetWindow?
 
   const costRows = [
     { name: 'Base Training Fee', quantity: 1, amount: data.basePrice },
-    ...data.addOns.map((addOn) => ({ name: addOn.name, quantity: addOn.quantity, amount: addOn.totalPrice }))
+    ...data.addOns.map((addOn) => ({ name: addOn.name, quantity: addOn.quantity, amount: addOn.totalPrice })),
+    ...(data.venue === 'client-site' ? [{ name: 'Transportation Fee (first 3 km free)', quantity: 1, amount: data.transportFee ?? 0 }] : [])
   ];
 
   if (data.addOns.length === 0) {
@@ -334,6 +343,7 @@ export async function downloadProposal(data: ProposalDownloadData, targetWindow?
   [
     'Quotation validity: 30 calendar days from the generated date.',
     'Payment terms: 50% down payment upon confirmation and remaining balance on or before the training date.',
+    'Transportation fee applies only to client-site training. The first 3 km is free; additional distance is computed per kilometer.',
     'Venue, meals, participant logistics, and third-party platform fees are excluded unless explicitly included in the quotation.',
     'Schedule changes are subject to facilitator availability and written confirmation.'
   ].forEach((item) => {

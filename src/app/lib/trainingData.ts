@@ -417,8 +417,11 @@ export async function createTrainingProposal(input: {
   duration: string;
   deliveryMode: string;
   venue: string;
+  venueAddress?: string;
+  distanceKm?: number;
   preferredDate?: string;
   basePrice: number;
+  transportFee?: number;
   totalPrice: number;
   addOns: Array<{
     addOnId: string;
@@ -440,8 +443,11 @@ export async function createTrainingProposal(input: {
       duration: input.duration,
       delivery_mode: input.deliveryMode,
       venue: input.venue,
+      venue_address: input.venueAddress || null,
+      distance_km: input.distanceKm ?? 0,
       preferred_date: input.preferredDate || null,
       base_price: input.basePrice,
+      transport_fee: input.transportFee ?? 0,
       total_price: input.totalPrice,
       status: 'submitted'
     })
@@ -477,8 +483,11 @@ export async function updateTrainingProposal(input: {
   duration: string;
   deliveryMode: string;
   venue: string;
+  venueAddress?: string;
+  distanceKm?: number;
   preferredDate?: string;
   basePrice: number;
+  transportFee?: number;
   totalPrice: number;
   addOns: Array<{
     addOnId: string;
@@ -498,8 +507,11 @@ export async function updateTrainingProposal(input: {
       duration: input.duration,
       delivery_mode: input.deliveryMode,
       venue: input.venue,
+      venue_address: input.venueAddress || null,
+      distance_km: input.distanceKm ?? 0,
       preferred_date: input.preferredDate || null,
       base_price: input.basePrice,
+      transport_fee: input.transportFee ?? 0,
       total_price: input.totalPrice
     })
     .eq('id', input.proposalId);
@@ -573,11 +585,14 @@ export async function fetchTrainingProposalDetails(proposalId: string) {
       duration: data.duration,
       mode: data.delivery_mode,
       venue: data.venue,
+      venueAddress: data.venue_address ?? '',
+      distanceKm: data.distance_km === null || data.distance_km === undefined ? '' : String(Number(data.distance_km)),
       preferredDate: data.preferred_date ?? '',
       addOns: Object.fromEntries(addOns.map((addOn: any) => [addOn.key, true]))
     },
     selectedAddOns: addOns,
     basePrice: Number(data.base_price),
+    transportFee: Number(data.transport_fee ?? 0),
     totalPrice: Number(data.total_price)
   };
 }

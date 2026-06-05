@@ -4,6 +4,9 @@ import { Check } from 'lucide-react';
 import { BRAND_TRAINING_CENTER } from '../branding';
 import { fetchTrainingAddOns, Training, TrainingAddOn } from '../lib/trainingData';
 
+const TRANSPORT_FREE_KM = 3;
+const TRANSPORT_RATE_PER_KM = 75;
+
 interface TrainingBuilderPageProps {
   training: Training | any;
   onNavigate: (page: string, data?: any) => void;
@@ -22,6 +25,8 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
     duration: input.formData?.duration ?? training.duration,
     mode: input.formData?.mode ?? training.mode,
     venue: input.formData?.venue ?? 'client-site',
+    venueAddress: input.formData?.venueAddress ?? '',
+    distanceKm: input.formData?.distanceKm ?? '',
     preferredDate: input.formData?.preferredDate ?? '',
     addOns: (input.formData?.addOns ?? {}) as Record<string, boolean>
   });
@@ -77,7 +82,14 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
     });
 
   const calculatePrice = () => {
-    return calculateBasePrice() + selectedAddOns.reduce((total, addOn) => total + addOn.totalPrice, 0);
+    return calculateBasePrice() + selectedAddOns.reduce((total, addOn) => total + addOn.totalPrice, 0) + calculateTransportFee();
+  };
+
+  const calculateTransportFee = () => {
+    if (formData.venue !== 'client-site') return 0;
+    const distance = Number(formData.distanceKm) || 0;
+    const billableDistance = Math.max(0, Math.ceil(distance - TRANSPORT_FREE_KM));
+    return billableDistance * TRANSPORT_RATE_PER_KM;
   };
 
   const today = new Date().toISOString().slice(0, 10);
@@ -95,6 +107,17 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
     if (!formData.duration) errors.duration = 'Please select a preferred duration.';
     if (!formData.mode) errors.mode = 'Please select a mode of delivery.';
     if (!formData.venue) errors.venue = 'Please select a venue option.';
+    if (formData.venue === 'client-site') {
+      const distance = Number(formData.distanceKm);
+      if (!formData.venueAddress.trim()) {
+        errors.venueAddress = 'Please enter the client site address for transportation planning.';
+      }
+      if (!formData.distanceKm) {
+        errors.distanceKm = 'Please enter the estimated distance in kilometers.';
+      } else if (!Number.isFinite(distance) || distance < 0) {
+        errors.distanceKm = 'Distance must be 0 or greater.';
+      }
+    }
 
     if (!formData.preferredDate) {
       errors.preferredDate = 'Please select a preferred training date.';
@@ -125,7 +148,8 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
       formData,
       selectedAddOns,
       basePrice: calculateBasePrice(),
-      totalPrice: calculatePrice()
+      totalPrice: calculatePrice(),
+      transportFee: calculateTransportFee()
     });
   };
 
@@ -265,6 +289,47 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
                 {validationErrors.venue && <p className="text-sm text-destructive mt-2">{validationErrors.venue}</p>}
               </div>
 
+              {formData.venue === 'client-site' && (
+                <div className="rounded-lg border border-border bg-muted/50 p-4 space-y-4">
+                  <div>
+                    <label className="block mb-2">Client Site Address</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.venueAddress}
+                      onChange={(event) => {
+                        setFormData({ ...formData, venueAddress: event.target.value });
+                        setValidationErrors({ ...validationErrors, venueAddress: '' });
+                      }}
+                      placeholder="Building, street, city, province"
+                      className={`w-full px-4 py-3 bg-input-background rounded-lg border ${validationErrors.venueAddress ? 'border-destructive' : 'border-border'}`}
+                    />
+                    {validationErrors.venueAddress && <p className="text-sm text-destructive mt-2">{validationErrors.venueAddress}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block mb-2">Estimated Distance from VYSPER Institute (km)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      required
+                      value={formData.distanceKm}
+                      onChange={(event) => {
+                        setFormData({ ...formData, distanceKm: event.target.value });
+                        setValidationErrors({ ...validationErrors, distanceKm: '' });
+                      }}
+                      placeholder="e.g., 8"
+                      className={`w-full px-4 py-3 bg-input-background rounded-lg border ${validationErrors.distanceKm ? 'border-destructive' : 'border-border'}`}
+                    />
+                    {validationErrors.distanceKm && <p className="text-sm text-destructive mt-2">{validationErrors.distanceKm}</p>}
+                    <p className="text-sm text-foreground/60 mt-2">
+                      First {TRANSPORT_FREE_KM} km is free. Additional distance is computed at PHP {TRANSPORT_RATE_PER_KM.toLocaleString()} per km.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block mb-2">Preferred Date</label>
                 <input
@@ -351,6 +416,22 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
                         {formData.venue === 'client-site' ? 'Client Site' : BRAND_TRAINING_CENTER}
                       </span>
                     </div>
+                    {formData.venue === 'client-site' && (
+                      <>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-foreground/60">Client Site Address:</span>
+                          <span className="text-right" style={{ fontWeight: 600 }}>{formData.venueAddress || 'Not specified'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-foreground/60">Estimated Distance:</span>
+                          <span style={{ fontWeight: 600 }}>{formData.distanceKm || '0'} km</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-foreground/60">Transportation Fee:</span>
+                          <span style={{ fontWeight: 600 }}>PHP {calculateTransportFee().toLocaleString()}</span>
+                        </div>
+                      </>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-foreground/60">Preferred Date:</span>
                       <span style={{ fontWeight: 600 }}>{formData.preferredDate || 'Not specified'}</span>

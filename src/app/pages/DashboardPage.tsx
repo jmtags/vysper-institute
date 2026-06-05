@@ -289,8 +289,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         duration: detail.formData.duration,
         deliveryMode: detail.formData.mode,
         venue: detail.formData.venue,
+        venueAddress: detail.formData.venueAddress,
+        distanceKm: detail.formData.distanceKm,
         preferredDate: detail.formData.preferredDate,
         basePrice: detail.basePrice,
+        transportFee: detail.transportFee,
         totalPrice: detail.totalPrice,
         trainingImageUrl: detail.training.image_url,
         trainingImagePosition: detail.training.image_position,
@@ -958,6 +961,12 @@ function QuotationReviewModal({ detail, form, saving, onFormChange, onClose, onS
               <InfoRow label="Duration" value={detail.formData.duration} />
               <InfoRow label="Delivery Mode" value={detail.formData.mode} />
               <InfoRow label="Venue" value={detail.formData.venue === 'client-site' ? 'Client Site' : 'VYSPER Institute Training Center'} />
+              {detail.formData.venue === 'client-site' && (
+                <>
+                  <InfoRow label="Client Site Address" value={detail.formData.venueAddress || 'Not provided'} />
+                  <InfoRow label="Estimated Distance" value={`${detail.formData.distanceKm || 0} km`} />
+                </>
+              )}
               <InfoRow label="Preferred Date" value={detail.formData.preferredDate || 'To be confirmed'} />
             </div>
           </section>
@@ -970,6 +979,9 @@ function QuotationReviewModal({ detail, form, saving, onFormChange, onClose, onS
                 <InfoRow key={addOn.id} label={`${addOn.name} (${addOn.quantity}x)`} value={`PHP ${Number(addOn.totalPrice).toLocaleString()}`} />
               )) : (
                 <p className="text-foreground/60">No paid add-ons selected.</p>
+              )}
+              {detail.formData.venue === 'client-site' && (
+                <InfoRow label="Transportation Fee" value={`PHP ${Number(detail.transportFee ?? 0).toLocaleString()}`} />
               )}
               <div className="pt-3 border-t border-border flex justify-between gap-4 text-base">
                 <span style={{ fontWeight: 600 }}>Total Price</span>

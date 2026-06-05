@@ -15,6 +15,7 @@ interface ProposalPreviewPageProps {
 export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPageProps) {
   const { user, profile } = useAuth();
   const { training, formData, selectedAddOns = [], basePrice, totalPrice, proposal } = data;
+  const transportFee = Number(data.transportFee ?? formData.transportFee ?? proposal?.transport_fee ?? 0);
   const isExistingProposal = Boolean(proposal?.id);
   const proposalNumber = proposal?.proposal_number || `${BRAND_PROPOSAL_PREFIX}-PENDING`;
   const isAdmin = profile?.role === 'admin';
@@ -47,15 +48,18 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
     duration: formData.duration,
     deliveryMode: formData.mode,
     venue: formData.venue,
+    venueAddress: formData.venueAddress,
+    distanceKm: formData.distanceKm,
     preferredDate: formData.preferredDate,
     basePrice,
+    transportFee,
     totalPrice,
     addOns: selectedAddOns.map((addOn: any) => ({
       name: addOn.name,
       quantity: addOn.quantity,
       totalPrice: addOn.totalPrice
     }))
-  }), [basePrice, clientInfo, formData, proposalNumber, savedProposalNumber, selectedAddOns, totalPrice, training.title]);
+  }), [basePrice, clientInfo, formData, proposalNumber, savedProposalNumber, selectedAddOns, totalPrice, training.title, transportFee]);
 
   const validateClientInfo = () => {
     const errors: Record<string, string> = {};
@@ -104,8 +108,11 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
         duration: formData.duration,
         deliveryMode: formData.mode,
         venue: formData.venue,
+        venueAddress: formData.venueAddress,
+        distanceKm: Number(formData.distanceKm || 0),
         preferredDate: formData.preferredDate,
         basePrice,
+        transportFee,
         totalPrice,
         addOns: selectedAddOns.map((addOn: any) => ({
           addOnId: addOn.id,
@@ -225,6 +232,12 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
                 <DetailRow label="Duration" value={formData.duration} />
                 <DetailRow label="Mode of Delivery" value={formData.mode} />
                 <DetailRow label="Venue" value={formData.venue === 'client-site' ? 'Client Site' : BRAND_TRAINING_CENTER} />
+                {formData.venue === 'client-site' && (
+                  <>
+                    <DetailRow label="Client Site Address" value={formData.venueAddress || 'Not provided'} />
+                    <DetailRow label="Estimated Distance" value={`${formData.distanceKm || 0} km`} />
+                  </>
+                )}
                 <DetailRow label="Preferred Date" value={formData.preferredDate || 'To be confirmed'} />
               </div>
             </section>
@@ -246,6 +259,13 @@ export function ProposalPreviewPage({ data, onNavigate }: ProposalPreviewPagePro
                         <span>PHP {addOn.totalPrice.toLocaleString()}</span>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {formData.venue === 'client-site' && (
+                  <div className="flex justify-between text-sm pt-2 border-t border-border">
+                    <span>Transportation Fee (first 3 km free)</span>
+                    <span>PHP {transportFee.toLocaleString()}</span>
                   </div>
                 )}
 
