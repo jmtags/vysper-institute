@@ -61,6 +61,7 @@ const emptyTrainingForm = {
   minParticipants: 15,
   maxParticipants: 30,
   basePrice: 25000,
+  sortOrder: 0,
   isActive: true,
   speakerIds: [] as string[]
 };
@@ -395,6 +396,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       minParticipants: training.min_participants,
       maxParticipants: training.max_participants,
       basePrice: training.base_price,
+      sortOrder: training.sort_order ?? 0,
       isActive: training.is_active,
       speakerIds
     });
@@ -424,6 +426,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         minParticipants: Number(trainingForm.minParticipants),
         maxParticipants: Number(trainingForm.maxParticipants),
         basePrice: Number(trainingForm.basePrice),
+        sortOrder: Number(trainingForm.sortOrder),
         isActive: trainingForm.isActive
       });
 
@@ -1654,6 +1657,7 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
                 </div>
               </div>
               <NumberField label="Base Price" value={form.basePrice} onChange={(value) => onFormChange({ ...form, basePrice: value })} />
+              <NumberField label="Sort Order" value={form.sortOrder} onChange={(value) => onFormChange({ ...form, sortOrder: value })} />
               <NumberField label="Min Participants" value={form.minParticipants} onChange={(value) => onFormChange({ ...form, minParticipants: value })} />
               <NumberField label="Max Participants" value={form.maxParticipants} onChange={(value) => onFormChange({ ...form, maxParticipants: value })} />
 
@@ -1712,6 +1716,7 @@ function TrainingsAdminPanel({ categories, trainings, speakers, form, saving, on
                 {!training.is_active && ' · Inactive'}
               </p>
               <p className="text-sm text-primary mt-1">PHP {training.base_price.toLocaleString()}</p>
+              <p className="text-xs text-foreground/50 mt-1">Sort order: {training.sort_order ?? 0}</p>
             </div>
             <div className="flex flex-wrap gap-2 lg:justify-end">
               <Button size="sm" variant="outline" onClick={() => handleEditTraining(training)}>Edit</Button>

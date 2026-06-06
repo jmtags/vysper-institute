@@ -25,6 +25,7 @@ export interface Training {
   min_participants: number;
   max_participants: number;
   base_price: number;
+  sort_order: number;
   is_active: boolean;
   category?: TrainingCategory | null;
 }
@@ -659,6 +660,7 @@ export async function upsertTraining(input: {
   minParticipants: number;
   maxParticipants: number;
   basePrice: number;
+  sortOrder: number;
   isActive: boolean;
 }) {
   const payload = {
@@ -676,6 +678,7 @@ export async function upsertTraining(input: {
     min_participants: input.minParticipants,
     max_participants: input.maxParticipants,
     base_price: input.basePrice,
+    sort_order: input.sortOrder,
     is_active: input.isActive
   };
 
