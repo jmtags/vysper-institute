@@ -10,6 +10,7 @@ import { TrainingBuilderPage } from './pages/TrainingBuilderPage';
 import { ProposalPreviewPage } from './pages/ProposalPreviewPage';
 import { CoursePlayerPage } from './pages/CoursePlayerPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { VerifyPage } from './pages/VerifyPage';
 import { submitContactMessage } from './lib/contactMessages';
 import { BRAND_NAME } from './branding';
 import { trackWebsiteVisit } from './lib/analytics';
@@ -21,6 +22,7 @@ const publicRoutes: Record<string, string> = {
   'digital-products': '/digital-products',
   'physical-products': '/physical-products',
   about: '/about',
+  verify: '/verify',
   contact: '/contact',
   dashboard: '/dashboard'
 };
@@ -41,6 +43,7 @@ function getPageFromPath(pathname: string) {
   if (normalizedPath === '/digital-products') return { page: 'digital-products', data: null };
   if (normalizedPath === '/physical-products') return { page: 'physical-products', data: null };
   if (normalizedPath === '/about') return { page: 'about', data: null };
+  if (normalizedPath === '/verify') return { page: 'verify', data: null };
   if (normalizedPath === '/contact') return { page: 'contact', data: null };
   if (normalizedPath === '/dashboard') return { page: 'dashboard', data: null };
   return { page: 'home', data: null };
@@ -55,6 +58,7 @@ function getPageMeta(page: string, data?: any) {
     'digital-products': 'Digital resources and professional toolkits from VYSPER Institute are coming soon.',
     'physical-products': 'Training kits, books, and assessment tools from VYSPER Institute are coming soon.',
     about: `Learn about ${BRAND_NAME}, a provider of evidence-based training and organizational development programs.`,
+    verify: `Verify training certificates issued by ${BRAND_NAME}.`,
     contact: `Contact ${BRAND_NAME} for training quotations, partnerships, and program inquiries.`,
     dashboard: `${BRAND_NAME} dashboard`
   };
@@ -239,6 +243,8 @@ function AppContent() {
             </div>
           </div>
         );
+      case 'verify':
+        return <VerifyPage />;
       case 'contact':
         return <ContactPage />;
       default:

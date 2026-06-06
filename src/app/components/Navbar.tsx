@@ -20,6 +20,7 @@ export function Navbar({ onNavigate, currentPage, onLogin, onSignUp, onLogout }:
     { label: 'Digital Products', page: 'digital-products', href: '/digital-products' },
     { label: 'Physical Products', page: 'physical-products', href: '/physical-products' },
     { label: 'About', page: 'about', href: '/about' },
+    { label: 'Verify', page: 'verify', href: '/verify' },
     { label: 'Contact', page: 'contact', href: '/contact' }
   ];
 

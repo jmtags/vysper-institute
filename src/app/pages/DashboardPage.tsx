@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Button';
-import { BarChart3, Check, FileText, GraduationCap, Mail, Shield, User, Users, Settings } from 'lucide-react';
+import { Award, BarChart3, Check, FileText, GraduationCap, Mail, Shield, User, Users, Settings } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../auth/AuthContext';
 import { ContactMessage, ContactMessageStatus, fetchContactMessages, updateContactMessageStatus } from '../lib/contactMessages';
@@ -35,12 +35,13 @@ import {
 } from '../lib/trainingData';
 import { BRAND_NAME } from '../branding';
 import { downloadProposal } from '../lib/proposalDownload';
+import { CertificateRecord, CertificateStatus, fetchCertificates, updateCertificateStatus, upsertCertificate } from '../lib/certificates';
 
 interface DashboardPageProps {
   onNavigate: (page: string, data?: any) => void;
 }
 
-type AdminTab = 'proposals' | 'messages' | 'users' | 'trainings' | 'add-ons' | 'speakers' | 'analytics';
+type AdminTab = 'proposals' | 'messages' | 'users' | 'trainings' | 'add-ons' | 'speakers' | 'certificates' | 'analytics';
 
 const emptyTrainingForm = {
   id: '',
@@ -86,6 +87,18 @@ const emptyAddOnForm = {
   isActive: true
 };
 
+const emptyCertificateForm = {
+  id: '',
+  certificateNumber: '',
+  recipientName: '',
+  programTitle: '',
+  issuedDate: new Date().toISOString().slice(0, 10),
+  completionDate: '',
+  facilitatorName: '',
+  remarks: '',
+  status: 'active' as CertificateStatus
+};
+
 export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
@@ -98,9 +111,11 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [categories, setCategories] = useState<TrainingCategory[]>([]);
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [trainingAddOns, setTrainingAddOns] = useState<TrainingAddOn[]>([]);
+  const [certificates, setCertificates] = useState<CertificateRecord[]>([]);
   const [trainingForm, setTrainingForm] = useState(emptyTrainingForm);
   const [speakerForm, setSpeakerForm] = useState(emptySpeakerForm);
   const [addOnForm, setAddOnForm] = useState(emptyAddOnForm);
+  const [certificateForm, setCertificateForm] = useState(emptyCertificateForm);
   const [quotationReview, setQuotationReview] = useState<any | null>(null);
   const [reviewForm, setReviewForm] = useState({
     status: 'submitted',
@@ -133,14 +148,16 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
       setTrainingAddOns(addOnData);
 
       if (isAdmin) {
-        const [profileData, messageData, visitData] = await Promise.all([
+        const [profileData, messageData, visitData, certificateData] = await Promise.all([
           fetchProfiles(),
           fetchContactMessages(),
-          fetchWebsiteVisits()
+          fetchWebsiteVisits(),
+          fetchCertificates()
         ]);
         setProfiles(profileData);
         setMessages(messageData);
         setAnalyticsVisits(visitData);
+        setCertificates(certificateData);
       }
     } catch (err: any) {
       setError(err.message ?? 'Unable to load dashboard data.');
@@ -159,6 +176,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     if (activeTab === 'trainings') return 'Training Management';
     if (activeTab === 'add-ons') return 'Add-ons Management';
     if (activeTab === 'speakers') return 'Speaker Management';
+    if (activeTab === 'certificates') return 'Certificate Verification';
     if (activeTab === 'analytics') return 'Website Analytics';
     if (activeTab === 'messages') return 'Contact Messages';
     return 'Quotation Requests';
@@ -563,6 +581,68 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     }
   };
 
+  const editCertificate = (certificate: CertificateRecord) => {
+    setCertificateForm({
+      id: certificate.id,
+      certificateNumber: certificate.certificate_number,
+      recipientName: certificate.recipient_name,
+      programTitle: certificate.program_title,
+      issuedDate: certificate.issued_date,
+      completionDate: certificate.completion_date ?? '',
+      facilitatorName: certificate.facilitator_name ?? '',
+      remarks: certificate.remarks ?? '',
+      status: certificate.status
+    });
+    setActiveTab('certificates');
+  };
+
+  const handleCertificateSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      await upsertCertificate({
+        id: certificateForm.id || undefined,
+        certificateNumber: certificateForm.certificateNumber,
+        recipientName: certificateForm.recipientName,
+        programTitle: certificateForm.programTitle,
+        issuedDate: certificateForm.issuedDate,
+        completionDate: certificateForm.completionDate,
+        facilitatorName: certificateForm.facilitatorName,
+        remarks: certificateForm.remarks,
+        status: certificateForm.status
+      });
+
+      setCertificates(await fetchCertificates());
+      setCertificateForm(emptyCertificateForm);
+      setNotice(certificateForm.id ? 'Certificate updated.' : 'Certificate created.');
+      return true;
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to save certificate.');
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCertificateStatusChange = async (certificateId: string, status: CertificateStatus) => {
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      await updateCertificateStatus(certificateId, status);
+      setCertificates(await fetchCertificates());
+      setNotice('Certificate status updated.');
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to update certificate status.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSpeakerImageUpload = async (file: File) => {
     setSaving(true);
     setNotice('');
@@ -642,6 +722,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   <AdminNavButton active={activeTab === 'trainings'} onClick={() => setActiveTab('trainings')} icon={<Settings className="w-4 h-4" />} label="Trainings" />
                   <AdminNavButton active={activeTab === 'add-ons'} onClick={() => setActiveTab('add-ons')} icon={<Check className="w-4 h-4" />} label="Add-ons" />
                   <AdminNavButton active={activeTab === 'speakers'} onClick={() => setActiveTab('speakers')} icon={<GraduationCap className="w-4 h-4" />} label="Speakers" />
+                  <AdminNavButton active={activeTab === 'certificates'} onClick={() => setActiveTab('certificates')} icon={<Award className="w-4 h-4" />} label="Certificates" />
                   <AdminNavButton active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} icon={<BarChart3 className="w-4 h-4" />} label="Analytics" />
                 </nav>
               ) : (
@@ -729,6 +810,19 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   onCancel={() => setSpeakerForm(emptySpeakerForm)}
                   onActiveChange={handleSpeakerActiveChange}
                   onImageUpload={handleSpeakerImageUpload}
+                />
+              )}
+
+              {!loading && !error && isAdmin && activeTab === 'certificates' && (
+                <CertificatesAdminPanel
+                  certificates={certificates}
+                  form={certificateForm}
+                  saving={saving}
+                  onFormChange={setCertificateForm}
+                  onSubmit={handleCertificateSubmit}
+                  onEdit={editCertificate}
+                  onCancel={() => setCertificateForm(emptyCertificateForm)}
+                  onStatusChange={handleCertificateStatusChange}
                 />
               )}
             </section>
@@ -1945,6 +2039,191 @@ function SpeakersAdminPanel({ speakers, form, saving, onFormChange, onSubmit, on
         {filteredSpeakers.length === 0 && (
           <div className="bg-muted rounded-lg p-6 text-center">
             <p className="text-foreground/60">No speakers match your search.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CertificatesAdminPanel({ certificates, form, saving, onFormChange, onSubmit, onEdit, onCancel, onStatusChange }: {
+  certificates: CertificateRecord[];
+  form: typeof emptyCertificateForm;
+  saving: boolean;
+  onFormChange: (form: typeof emptyCertificateForm) => void;
+  onSubmit: (event: FormEvent) => Promise<boolean>;
+  onEdit: (certificate: CertificateRecord) => void;
+  onCancel: () => void;
+  onStatusChange: (certificateId: string, status: CertificateStatus) => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredCertificates = certificates.filter((certificate) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    return [
+      certificate.certificate_number,
+      certificate.recipient_name,
+      certificate.program_title,
+      certificate.facilitator_name,
+      certificate.status
+    ].some((value) => value?.toLowerCase().includes(query));
+  });
+
+  const handleAddCertificate = () => {
+    onCancel();
+    setShowForm(true);
+  };
+
+  const handleEditCertificate = (certificate: CertificateRecord) => {
+    onEdit(certificate);
+    setShowForm(true);
+  };
+
+  const handleCancelForm = () => {
+    onCancel();
+    setShowForm(false);
+  };
+
+  const handleSubmitForm = async (event: FormEvent) => {
+    const saved = await onSubmit(event);
+    if (saved) setShowForm(false);
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-primary">Certificate Records</h3>
+          <p className="text-sm text-foreground/60">Manage certificate numbers that clients can verify on the public Verify page.</p>
+        </div>
+        <Button onClick={handleAddCertificate}>Add Certificate</Button>
+      </div>
+
+      <div>
+        <label className="block mb-2 text-sm">Search Certificates</label>
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search by certificate number, recipient, program, facilitator, or status"
+          className="w-full px-4 py-3 bg-input-background rounded-lg border border-border"
+        />
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 z-[90] bg-black/45 flex items-center justify-center px-4 py-8">
+          <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <form onSubmit={handleSubmitForm} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2 flex items-center justify-between gap-4 border-b border-border pb-4 mb-2">
+                <div>
+                  <h3 className="text-primary">{form.id ? 'Edit Certificate' : 'Create Certificate'}</h3>
+                  <p className="text-sm text-foreground/60">Use a unique certificate number exactly as it appears on the issued certificate.</p>
+                </div>
+                <button type="button" onClick={handleCancelForm} className="px-3 py-2 rounded-lg hover:bg-muted text-foreground/70">
+                  Close
+                </button>
+              </div>
+
+              <Field
+                label="Certificate Number"
+                value={form.certificateNumber}
+                onChange={(value) => onFormChange({ ...form, certificateNumber: value.toUpperCase() })}
+                required
+              />
+              <Field label="Recipient Name" value={form.recipientName} onChange={(value) => onFormChange({ ...form, recipientName: value })} required />
+              <Field label="Program Title" value={form.programTitle} onChange={(value) => onFormChange({ ...form, programTitle: value })} required wide />
+
+              <div>
+                <label className="block mb-2">Issued Date</label>
+                <input
+                  type="date"
+                  value={form.issuedDate}
+                  onChange={(event) => onFormChange({ ...form, issuedDate: event.target.value })}
+                  required
+                  className="w-full px-3 py-2 bg-card rounded-lg border border-border"
+                />
+              </div>
+
+              <div>
+                <label className="block mb-2">Completion Date</label>
+                <input
+                  type="date"
+                  value={form.completionDate}
+                  onChange={(event) => onFormChange({ ...form, completionDate: event.target.value })}
+                  className="w-full px-3 py-2 bg-card rounded-lg border border-border"
+                />
+              </div>
+
+              <Field label="Facilitator" value={form.facilitatorName} onChange={(value) => onFormChange({ ...form, facilitatorName: value })} />
+
+              <div>
+                <label className="block mb-2">Status</label>
+                <select
+                  value={form.status}
+                  onChange={(event) => onFormChange({ ...form, status: event.target.value as CertificateStatus })}
+                  className="w-full px-3 py-2 bg-card rounded-lg border border-border"
+                >
+                  <option value="active">Active</option>
+                  <option value="revoked">Revoked</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+
+              <TextareaField label="Remarks" value={form.remarks} onChange={(value) => onFormChange({ ...form, remarks: value })} />
+
+              <div className="md:col-span-2 flex gap-3 justify-end border-t border-border pt-4 mt-2">
+                <Button type="button" variant="outline" onClick={handleCancelForm}>Cancel</Button>
+                <Button type="submit" disabled={saving}>{saving ? 'Saving...' : form.id ? 'Update Certificate' : 'Create Certificate'}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {filteredCertificates.map((certificate) => (
+          <div key={certificate.id} className="grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-4 p-4 bg-muted rounded-lg">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <p style={{ fontWeight: 700 }} className="text-primary">{certificate.certificate_number}</p>
+                <span className={`px-2 py-0.5 rounded-full text-xs capitalize ${
+                  certificate.status === 'active'
+                    ? 'bg-secondary/20 text-secondary'
+                    : certificate.status === 'revoked'
+                      ? 'bg-destructive/10 text-destructive'
+                      : 'bg-foreground/10 text-foreground/60'
+                }`}>
+                  {certificate.status}
+                </span>
+              </div>
+              <p className="mt-2" style={{ fontWeight: 600 }}>{certificate.recipient_name}</p>
+              <p className="text-sm text-foreground/70">{certificate.program_title}</p>
+              <p className="text-xs text-foreground/50 mt-1">
+                Issued {new Date(certificate.issued_date).toLocaleDateString()}
+                {certificate.completion_date && ` / Completed ${new Date(certificate.completion_date).toLocaleDateString()}`}
+                {certificate.facilitator_name && ` / ${certificate.facilitator_name}`}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 xl:justify-end">
+              <Button size="sm" variant="outline" onClick={() => handleEditCertificate(certificate)}>Edit</Button>
+              <Button size="sm" variant="ghost" onClick={() => onStatusChange(certificate.id, 'active')} disabled={saving || certificate.status === 'active'}>
+                Activate
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => onStatusChange(certificate.id, 'revoked')} disabled={saving || certificate.status === 'revoked'}>
+                Revoke
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => onStatusChange(certificate.id, 'archived')} disabled={saving || certificate.status === 'archived'}>
+                Archive
+              </Button>
+            </div>
+          </div>
+        ))}
+
+        {filteredCertificates.length === 0 && (
+          <div className="bg-muted rounded-lg p-6 text-center">
+            <p className="text-foreground/60">No certificates match your search.</p>
           </div>
         )}
       </div>

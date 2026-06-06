@@ -31,6 +31,7 @@ export function Footer() {
             <ul className="space-y-2 text-sm text-primary-foreground/80">
               <li>About Us</li>
               <li>Our Team</li>
+              <li><a href="/verify" className="hover:text-primary-foreground">Verify Certificate</a></li>
               <li>Testimonials</li>
               <li>Contact</li>
             </ul>
