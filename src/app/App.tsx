@@ -76,7 +76,7 @@ function ComingSoonPage({ title }: { title: string }) {
         <p className="text-secondary mb-3" style={{ fontWeight: 600 }}>Coming Soon</p>
         <h1 className="mb-4 text-primary">{title}</h1>
         <p className="text-xl text-foreground/70">
-          This service is being prepared for a later release. For the MVP, training programs and quotation requests are available now.
+          This service is being prepared for a later release. Please check back soon for updates.
         </p>
       </div>
     </div>
