@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Button';
-import { Award, BarChart3, Check, FileText, GraduationCap, Mail, Shield, User, Users, Settings } from 'lucide-react';
+import { Award, BarChart3, Check, Download, FileText, GraduationCap, Mail, Shield, Upload, User, Users, Settings } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../auth/AuthContext';
 import { ContactMessage, ContactMessageStatus, fetchContactMessages, updateContactMessageStatus } from '../lib/contactMessages';
@@ -35,7 +35,7 @@ import {
 } from '../lib/trainingData';
 import { BRAND_NAME } from '../branding';
 import { downloadProposal } from '../lib/proposalDownload';
-import { CertificateRecord, CertificateStatus, fetchCertificates, updateCertificateStatus, upsertCertificate } from '../lib/certificates';
+import { BulkCertificateInput, CertificateRecord, CertificateStatus, bulkUpsertCertificates, fetchCertificates, updateCertificateStatus, upsertCertificate } from '../lib/certificates';
 
 interface DashboardPageProps {
   onNavigate: (page: string, data?: any) => void;
@@ -643,6 +643,24 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     }
   };
 
+  const handleCertificateBulkImport = async (file: File) => {
+    setSaving(true);
+    setNotice('');
+    setError('');
+
+    try {
+      const text = await file.text();
+      const rows = parseCertificateCsv(text);
+      await bulkUpsertCertificates(rows);
+      setCertificates(await fetchCertificates());
+      setNotice(`${rows.length} certificate${rows.length === 1 ? '' : 's'} imported successfully.`);
+    } catch (err: any) {
+      setError(err.message ?? 'Unable to import certificate list.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSpeakerImageUpload = async (file: File) => {
     setSaving(true);
     setNotice('');
@@ -823,6 +841,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   onEdit={editCertificate}
                   onCancel={() => setCertificateForm(emptyCertificateForm)}
                   onStatusChange={handleCertificateStatusChange}
+                  onBulkImport={handleCertificateBulkImport}
                 />
               )}
             </section>
@@ -2046,7 +2065,7 @@ function SpeakersAdminPanel({ speakers, form, saving, onFormChange, onSubmit, on
   );
 }
 
-function CertificatesAdminPanel({ certificates, form, saving, onFormChange, onSubmit, onEdit, onCancel, onStatusChange }: {
+function CertificatesAdminPanel({ certificates, form, saving, onFormChange, onSubmit, onEdit, onCancel, onStatusChange, onBulkImport }: {
   certificates: CertificateRecord[];
   form: typeof emptyCertificateForm;
   saving: boolean;
@@ -2055,6 +2074,7 @@ function CertificatesAdminPanel({ certificates, form, saving, onFormChange, onSu
   onEdit: (certificate: CertificateRecord) => void;
   onCancel: () => void;
   onStatusChange: (certificateId: string, status: CertificateStatus) => void;
+  onBulkImport: (file: File) => Promise<void>;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -2091,6 +2111,29 @@ function CertificatesAdminPanel({ certificates, form, saving, onFormChange, onSu
     if (saved) setShowForm(false);
   };
 
+  const handleTemplateDownload = () => {
+    const rows = [
+      ['certificate_number', 'recipient_name', 'program_title', 'issued_date', 'completion_date', 'facilitator_name', 'remarks', 'status'],
+      ['VYS-CERT-2026-0001', 'Juan Dela Cruz', 'Mental Health First Aid in the Workplace', '2026-06-06', '2026-06-05', 'Dr. Maria Santos', 'Completed with certificate of participation', 'active']
+    ];
+    const csv = rows.map((row) => row.map(escapeCsvValue).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'vysper-certificate-import-template.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) await onBulkImport(file);
+    event.target.value = '';
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -2098,7 +2141,22 @@ function CertificatesAdminPanel({ certificates, form, saving, onFormChange, onSu
           <h3 className="text-primary">Certificate Records</h3>
           <p className="text-sm text-foreground/60">Manage certificate numbers that clients can verify on the public Verify page.</p>
         </div>
-        <Button onClick={handleAddCertificate}>Add Certificate</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={handleTemplateDownload}>
+            <Download className="w-4 h-4" />
+            Download Template
+          </Button>
+          <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card text-primary hover:bg-muted cursor-pointer">
+            <Upload className="w-4 h-4" />
+            Upload CSV
+            <input type="file" accept=".csv,text/csv" onChange={handleImportChange} disabled={saving} className="sr-only" />
+          </label>
+          <Button onClick={handleAddCertificate}>Add Certificate</Button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-muted/60 p-4 text-sm text-foreground/70">
+        Use the CSV template in Excel, keep the header row unchanged, then upload the saved CSV file. Required columns are certificate_number, recipient_name, program_title, and issued_date.
       </div>
 
       <div>
@@ -2229,6 +2287,95 @@ function CertificatesAdminPanel({ certificates, form, saving, onFormChange, onSu
       </div>
     </div>
   );
+}
+
+function escapeCsvValue(value: string) {
+  if (/[",\r\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+function splitCsvLine(line: string) {
+  const values: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"';
+      index += 1;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      values.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
+function normalizeCsvHeader(value: string) {
+  return value.trim().toLowerCase().replace(/^\uFEFF/, '');
+}
+
+function parseCertificateCsv(csvText: string): BulkCertificateInput[] {
+  const lines = csvText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) {
+    throw new Error('The uploaded CSV has no certificate rows.');
+  }
+
+  const headers = splitCsvLine(lines[0]).map(normalizeCsvHeader);
+  const requiredHeaders = ['certificate_number', 'recipient_name', 'program_title', 'issued_date'];
+  const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
+  if (missingHeaders.length > 0) {
+    throw new Error(`Missing required column${missingHeaders.length === 1 ? '' : 's'}: ${missingHeaders.join(', ')}.`);
+  }
+
+  const getValue = (values: string[], header: string) => {
+    const index = headers.indexOf(header);
+    return index >= 0 ? values[index]?.trim() ?? '' : '';
+  };
+
+  return lines.slice(1).map((line, index) => {
+    const values = splitCsvLine(line);
+    const rowNumber = index + 2;
+    const certificateNumber = getValue(values, 'certificate_number').toUpperCase();
+    const recipientName = getValue(values, 'recipient_name');
+    const programTitle = getValue(values, 'program_title');
+    const issuedDate = getValue(values, 'issued_date');
+    const completionDate = getValue(values, 'completion_date');
+    const statusValue = getValue(values, 'status').toLowerCase() || 'active';
+    const status = ['active', 'revoked', 'archived'].includes(statusValue) ? statusValue as CertificateStatus : null;
+
+    if (!certificateNumber) throw new Error(`Row ${rowNumber}: certificate_number is required.`);
+    if (!recipientName) throw new Error(`Row ${rowNumber}: recipient_name is required.`);
+    if (!programTitle) throw new Error(`Row ${rowNumber}: program_title is required.`);
+    if (!issuedDate) throw new Error(`Row ${rowNumber}: issued_date is required.`);
+    if (Number.isNaN(Date.parse(issuedDate))) throw new Error(`Row ${rowNumber}: issued_date must be a valid date, ideally YYYY-MM-DD.`);
+    if (completionDate && Number.isNaN(Date.parse(completionDate))) throw new Error(`Row ${rowNumber}: completion_date must be a valid date, ideally YYYY-MM-DD.`);
+    if (!status) throw new Error(`Row ${rowNumber}: status must be active, revoked, or archived.`);
+
+    return {
+      certificateNumber,
+      recipientName,
+      programTitle,
+      issuedDate,
+      completionDate,
+      facilitatorName: getValue(values, 'facilitator_name'),
+      remarks: getValue(values, 'remarks'),
+      status
+    };
+  });
 }
 
 function Field({ label, value, onChange, required = false, wide = false }: {

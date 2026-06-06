@@ -16,6 +16,17 @@ export interface CertificateRecord {
   updated_at: string;
 }
 
+export interface BulkCertificateInput {
+  certificateNumber: string;
+  recipientName: string;
+  programTitle: string;
+  issuedDate: string;
+  completionDate?: string;
+  facilitatorName?: string;
+  remarks?: string;
+  status: CertificateStatus;
+}
+
 export async function verifyCertificate(certificateNumber: string) {
   const normalizedCode = certificateNumber.trim().toUpperCase();
   if (!normalizedCode) {
@@ -69,6 +80,29 @@ export async function upsertCertificate(input: {
     : supabase.from('certificates').insert(payload);
 
   const { error } = await query;
+  if (error) throw error;
+}
+
+export async function bulkUpsertCertificates(inputs: BulkCertificateInput[]) {
+  if (inputs.length === 0) {
+    throw new Error('No certificate rows found for import.');
+  }
+
+  const payload = inputs.map((input) => ({
+    certificate_number: input.certificateNumber.trim().toUpperCase(),
+    recipient_name: input.recipientName.trim(),
+    program_title: input.programTitle.trim(),
+    issued_date: input.issuedDate,
+    completion_date: input.completionDate || null,
+    facilitator_name: input.facilitatorName || null,
+    remarks: input.remarks || null,
+    status: input.status
+  }));
+
+  const { error } = await supabase
+    .from('certificates')
+    .upsert(payload, { onConflict: 'certificate_number' });
+
   if (error) throw error;
 }
 
