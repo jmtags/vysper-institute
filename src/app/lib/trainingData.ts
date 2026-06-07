@@ -424,6 +424,19 @@ export async function checkTrainingDateAvailable(input: {
   return Boolean(data);
 }
 
+export async function fetchUnavailableTrainingDates(input: {
+  trainingId: string;
+  excludeProposalId?: string | null;
+}) {
+  const { data, error } = await supabase.rpc('get_unavailable_training_dates', {
+    p_training_id: input.trainingId,
+    p_exclude_proposal_id: input.excludeProposalId ?? null
+  });
+
+  if (error) throw error;
+  return (data ?? []).map((item: any) => item.booked_date as string);
+}
+
 async function ensureTrainingDateAvailable(input: {
   trainingId: string;
   preferredDate?: string | null;

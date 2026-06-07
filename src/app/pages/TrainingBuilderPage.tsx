@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../components/Button';
-import { Check } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { BRAND_TRAINING_CENTER } from '../branding';
-import { fetchTrainingAddOns, Training, TrainingAddOn } from '../lib/trainingData';
+import { fetchTrainingAddOns, fetchUnavailableTrainingDates, Training, TrainingAddOn } from '../lib/trainingData';
 
 const TRANSPORT_FREE_KM = 3;
 const TRANSPORT_RATE_PER_KM = 75;
@@ -19,6 +19,8 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
   const [step, setStep] = useState(1);
   const [addOns, setAddOns] = useState<TrainingAddOn[]>([]);
   const [loadingAddOns, setLoadingAddOns] = useState(true);
+  const [unavailableDates, setUnavailableDates] = useState<string[]>([]);
+  const [loadingUnavailableDates, setLoadingUnavailableDates] = useState(true);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     participants: input.formData?.participants ?? '',
@@ -34,20 +36,31 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
   useEffect(() => {
     let mounted = true;
 
-    fetchTrainingAddOns()
+    Promise.all([
+      fetchTrainingAddOns(),
+      fetchUnavailableTrainingDates({
+        trainingId: training.id,
+        excludeProposalId: existingProposal?.id ?? null
+      })
+    ])
       .then((data) => {
         if (!mounted) return;
-        setAddOns(data);
+        const [addOnData, bookedDates] = data;
+        setAddOns(addOnData);
+        setUnavailableDates(bookedDates);
         setFormData((current) => ({
           ...current,
-          addOns: Object.fromEntries(data.map((addOn) => [
+          addOns: Object.fromEntries(addOnData.map((addOn) => [
             addOn.key,
             current.addOns[addOn.key] ?? (addOn.pricing_type === 'included')
           ]))
         }));
       })
       .finally(() => {
-        if (mounted) setLoadingAddOns(false);
+        if (mounted) {
+          setLoadingAddOns(false);
+          setLoadingUnavailableDates(false);
+        }
       });
 
     return () => {
@@ -123,6 +136,8 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
       errors.preferredDate = 'Please select a preferred training date.';
     } else if (formData.preferredDate < today) {
       errors.preferredDate = 'Preferred date cannot be in the past.';
+    } else if (unavailableDates.includes(formData.preferredDate)) {
+      errors.preferredDate = 'This training is already confirmed on the selected date. Please choose another date.';
     }
 
     setValidationErrors(errors);
@@ -332,16 +347,15 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
 
               <div>
                 <label className="block mb-2">Preferred Date</label>
-                <input
-                  type="date"
-                  min={today}
-                  required
+                <TrainingDateCalendar
                   value={formData.preferredDate}
-                  onChange={(event) => {
-                    setFormData({ ...formData, preferredDate: event.target.value });
+                  minDate={today}
+                  unavailableDates={unavailableDates}
+                  loading={loadingUnavailableDates}
+                  onChange={(date) => {
+                    setFormData({ ...formData, preferredDate: date });
                     setValidationErrors({ ...validationErrors, preferredDate: '' });
                   }}
-                  className={`w-full px-4 py-3 bg-input-background rounded-lg border ${validationErrors.preferredDate ? 'border-destructive' : 'border-border'}`}
                 />
                 {validationErrors.preferredDate && <p className="text-sm text-destructive mt-2">{validationErrors.preferredDate}</p>}
               </div>
@@ -479,4 +493,110 @@ export function TrainingBuilderPage({ training: input, onNavigate }: TrainingBui
       </div>
     </div>
   );
+}
+
+function TrainingDateCalendar({ value, minDate, unavailableDates, loading, onChange }: {
+  value: string;
+  minDate: string;
+  unavailableDates: string[];
+  loading: boolean;
+  onChange: (date: string) => void;
+}) {
+  const [visibleMonth, setVisibleMonth] = useState(() => parseDateKey(value || minDate));
+  const unavailableSet = new Set(unavailableDates);
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const cells = [
+    ...Array.from({ length: firstWeekday }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1)
+  ];
+
+  const changeMonth = (offset: number) => {
+    setVisibleMonth(new Date(year, month + offset, 1));
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-input-background p-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <button
+          type="button"
+          onClick={() => changeMonth(-1)}
+          className="h-9 w-9 rounded-lg border border-border bg-card hover:bg-muted flex items-center justify-center"
+          aria-label="Previous month"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <p className="text-primary" style={{ fontWeight: 700 }}>
+          {visibleMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+        </p>
+        <button
+          type="button"
+          onClick={() => changeMonth(1)}
+          className="h-9 w-9 rounded-lg border border-border bg-card hover:bg-muted flex items-center justify-center"
+          aria-label="Next month"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 text-center text-xs text-foreground/60 mb-2">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+          <span key={day}>{day}</span>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((day, index) => {
+          if (!day) return <span key={`blank-${index}`} className="aspect-square" />;
+
+          const dateKey = toDateKey(new Date(year, month, day));
+          const isPast = dateKey < minDate;
+          const isUnavailable = unavailableSet.has(dateKey);
+          const disabled = isPast || isUnavailable || loading;
+          const selected = value === dateKey;
+
+          return (
+            <button
+              key={dateKey}
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange(dateKey)}
+              title={isUnavailable ? 'This training is already confirmed on this date' : undefined}
+              className={`aspect-square rounded-lg border text-sm transition-colors ${
+                selected
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : isUnavailable
+                    ? 'bg-destructive/10 text-destructive border-destructive/20 cursor-not-allowed line-through'
+                    : isPast
+                      ? 'bg-muted text-foreground/30 border-border cursor-not-allowed'
+                      : 'bg-card text-foreground border-border hover:bg-primary/10 hover:text-primary'
+              }`}
+            >
+              {day}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-3 text-xs text-foreground/60">
+        <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded bg-primary" /> Selected</span>
+        <span className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded bg-destructive/20 border border-destructive/20" /> Booked</span>
+        {loading && <span>Checking availability...</span>}
+      </div>
+    </div>
+  );
+}
+
+function parseDateKey(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+}
+
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
