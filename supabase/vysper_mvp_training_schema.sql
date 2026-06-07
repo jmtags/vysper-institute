@@ -408,6 +408,29 @@ to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
+create or replace function public.is_training_date_available(
+  p_training_id uuid,
+  p_preferred_date date,
+  p_exclude_proposal_id uuid default null
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select not exists (
+    select 1
+    from public.training_proposals p
+    where p.training_id = p_training_id
+      and p.preferred_date = p_preferred_date
+      and p.status = 'accepted'
+      and (p_exclude_proposal_id is null or p.id <> p_exclude_proposal_id)
+  );
+$$;
+
+grant execute on function public.is_training_date_available(uuid, date, uuid) to anon, authenticated;
+
 drop policy if exists "users_manage_own_proposal_add_ons" on public.training_proposal_add_ons;
 create policy "users_manage_own_open_proposal_add_ons"
 on public.training_proposal_add_ons for all

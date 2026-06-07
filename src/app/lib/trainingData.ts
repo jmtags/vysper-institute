@@ -407,6 +407,34 @@ export async function setTrainingAddOnActive(addOnId: string, isActive: boolean)
   if (error) throw error;
 }
 
+export async function checkTrainingDateAvailable(input: {
+  trainingId: string;
+  preferredDate?: string | null;
+  excludeProposalId?: string | null;
+}) {
+  if (!input.preferredDate) return true;
+
+  const { data, error } = await supabase.rpc('is_training_date_available', {
+    p_training_id: input.trainingId,
+    p_preferred_date: input.preferredDate,
+    p_exclude_proposal_id: input.excludeProposalId ?? null
+  });
+
+  if (error) throw error;
+  return Boolean(data);
+}
+
+async function ensureTrainingDateAvailable(input: {
+  trainingId: string;
+  preferredDate?: string | null;
+  excludeProposalId?: string | null;
+}) {
+  const available = await checkTrainingDateAvailable(input);
+  if (!available) {
+    throw new Error('This training is already confirmed on the selected date. Please choose another date.');
+  }
+}
+
 export async function createTrainingProposal(input: {
   userId: string;
   trainingId: string;
@@ -431,6 +459,11 @@ export async function createTrainingProposal(input: {
     totalPrice: number;
   }>;
 }) {
+  await ensureTrainingDateAvailable({
+    trainingId: input.trainingId,
+    preferredDate: input.preferredDate
+  });
+
   const { data: proposal, error } = await supabase
     .from('training_proposals')
     .insert({
@@ -497,6 +530,20 @@ export async function updateTrainingProposal(input: {
     totalPrice: number;
   }>;
 }) {
+  const { data: existingProposal, error: existingProposalError } = await supabase
+    .from('training_proposals')
+    .select('training_id')
+    .eq('id', input.proposalId)
+    .single();
+
+  if (existingProposalError) throw existingProposalError;
+
+  await ensureTrainingDateAvailable({
+    trainingId: existingProposal.training_id,
+    preferredDate: input.preferredDate,
+    excludeProposalId: input.proposalId
+  });
+
   const { error } = await supabase
     .from('training_proposals')
     .update({
@@ -544,7 +591,7 @@ export async function updateTrainingProposal(input: {
 export async function fetchTrainingProposals() {
   const { data, error } = await supabase
     .from('training_proposals')
-    .select('id, proposal_number, status, total_price, created_at, organization_name, contact_person, contact_email, user_id, admin_notes, decline_reason, training:trainings(title)')
+    .select('id, proposal_number, status, total_price, created_at, organization_name, contact_person, contact_email, user_id, training_id, preferred_date, duration, delivery_mode, venue, participants, admin_notes, decline_reason, training:trainings(id, title)')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
@@ -599,6 +646,22 @@ export async function fetchTrainingProposalDetails(proposalId: string) {
 }
 
 export async function updateTrainingProposalStatus(proposalId: string, status: 'draft' | 'submitted' | 'accepted' | 'declined' | 'archived') {
+  if (status === 'accepted') {
+    const { data: proposal, error: proposalError } = await supabase
+      .from('training_proposals')
+      .select('training_id, preferred_date')
+      .eq('id', proposalId)
+      .single();
+
+    if (proposalError) throw proposalError;
+
+    await ensureTrainingDateAvailable({
+      trainingId: proposal.training_id,
+      preferredDate: proposal.preferred_date,
+      excludeProposalId: proposalId
+    });
+  }
+
   const { error } = await supabase
     .from('training_proposals')
     .update({ status })
@@ -613,6 +676,22 @@ export async function updateTrainingProposalReview(input: {
   adminNotes?: string;
   declineReason?: string;
 }) {
+  if (input.status === 'accepted') {
+    const { data: proposal, error: proposalError } = await supabase
+      .from('training_proposals')
+      .select('training_id, preferred_date')
+      .eq('id', input.proposalId)
+      .single();
+
+    if (proposalError) throw proposalError;
+
+    await ensureTrainingDateAvailable({
+      trainingId: proposal.training_id,
+      preferredDate: proposal.preferred_date,
+      excludeProposalId: input.proposalId
+    });
+  }
+
   const { error } = await supabase
     .from('training_proposals')
     .update({

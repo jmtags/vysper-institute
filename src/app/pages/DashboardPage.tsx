@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button } from '../components/Button';
-import { Award, BarChart3, Check, Download, FileText, GraduationCap, Mail, Shield, Upload, User, Users, Settings } from 'lucide-react';
+import { Award, BarChart3, CalendarDays, Check, Download, FileText, GraduationCap, Mail, Shield, Upload, User, Users, Settings } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../auth/AuthContext';
 import { ContactMessage, ContactMessageStatus, fetchContactMessages, updateContactMessageStatus } from '../lib/contactMessages';
@@ -41,7 +41,7 @@ interface DashboardPageProps {
   onNavigate: (page: string, data?: any) => void;
 }
 
-type AdminTab = 'proposals' | 'messages' | 'users' | 'trainings' | 'add-ons' | 'speakers' | 'certificates' | 'analytics';
+type AdminTab = 'proposals' | 'calendar' | 'messages' | 'users' | 'trainings' | 'add-ons' | 'speakers' | 'certificates' | 'analytics';
 
 const emptyTrainingForm = {
   id: '',
@@ -173,6 +173,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   const dashboardTitle = useMemo(() => {
     if (!isAdmin) return 'My Training Quotations';
+    if (activeTab === 'calendar') return 'Training Calendar';
     if (activeTab === 'users') return 'User Management';
     if (activeTab === 'trainings') return 'Training Management';
     if (activeTab === 'add-ons') return 'Add-ons Management';
@@ -738,6 +739,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
               {isAdmin ? (
                 <nav className="space-y-2">
                   <AdminNavButton active={activeTab === 'proposals'} onClick={() => setActiveTab('proposals')} icon={<FileText className="w-4 h-4" />} label="Quotations" />
+                  <AdminNavButton active={activeTab === 'calendar'} onClick={() => setActiveTab('calendar')} icon={<CalendarDays className="w-4 h-4" />} label="Calendar" />
                   <AdminNavButton active={activeTab === 'messages'} onClick={() => setActiveTab('messages')} icon={<Mail className="w-4 h-4" />} label="Messages" />
                   <AdminNavButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<Users className="w-4 h-4" />} label="Users" />
                   <AdminNavButton active={activeTab === 'trainings'} onClick={() => setActiveTab('trainings')} icon={<Settings className="w-4 h-4" />} label="Trainings" />
@@ -777,6 +779,10 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
                   onDownloadProposal={handleDownloadProposal}
                   onBrowseTrainings={() => onNavigate('trainings')}
                 />
+              )}
+
+              {!loading && !error && isAdmin && activeTab === 'calendar' && (
+                <TrainingCalendarPanel proposals={proposals} onReviewProposal={handleReviewProposal} />
               )}
 
               {!loading && !error && isAdmin && activeTab === 'users' && (
@@ -973,6 +979,94 @@ function ProposalPanel({ proposals, isAdmin, saving, onStatusChange, onOpenPropo
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function TrainingCalendarPanel({ proposals, onReviewProposal }: {
+  proposals: any[];
+  onReviewProposal: (proposalId: string) => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const confirmedEvents = proposals
+    .filter((proposal) => proposal.status === 'accepted' && proposal.preferred_date)
+    .sort((a, b) => String(a.preferred_date).localeCompare(String(b.preferred_date)));
+  const upcomingEvents = confirmedEvents.filter((proposal) => String(proposal.preferred_date) >= today);
+  const pastEvents = confirmedEvents.filter((proposal) => String(proposal.preferred_date) < today);
+  const eventsByDate = upcomingEvents.reduce<Record<string, any[]>>((groups, proposal) => {
+    const date = proposal.preferred_date;
+    groups[date] = groups[date] ?? [];
+    groups[date].push(proposal);
+    return groups;
+  }, {});
+  const groupedDates = Object.keys(eventsByDate).sort();
+
+  if (confirmedEvents.length === 0) {
+    return (
+      <div className="bg-muted rounded-lg p-6 text-center">
+        <p className="text-foreground/70">No confirmed training bookings yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <CalendarStat label="Upcoming Events" value={upcomingEvents.length} />
+        <CalendarStat label="Completed Events" value={pastEvents.length} />
+        <CalendarStat label="Booked Dates" value={groupedDates.length} />
+      </div>
+
+      {groupedDates.length === 0 ? (
+        <div className="bg-muted rounded-lg p-6 text-center">
+          <p className="text-foreground/70">No upcoming confirmed bookings. Past bookings are kept in quotation records.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {groupedDates.map((date) => (
+            <div key={date} className="rounded-lg border border-border bg-muted overflow-hidden">
+              <div className="bg-primary/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <p className="text-primary" style={{ fontWeight: 700 }}>
+                    {new Date(date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                  </p>
+                  <p className="text-sm text-foreground/60">
+                    {eventsByDate[date].length} confirmed training{eventsByDate[date].length === 1 ? '' : 's'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="divide-y divide-border">
+                {eventsByDate[date].map((proposal) => (
+                  <div key={proposal.id} className="p-4 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
+                    <div>
+                      <p style={{ fontWeight: 600 }}>{proposal.training?.title ?? 'Training Program'}</p>
+                      <p className="text-sm text-foreground/60 mt-1">
+                        {proposal.organization_name || 'No organization'} / {proposal.participants || 0} participants / {proposal.duration}
+                      </p>
+                      <p className="text-xs text-foreground/50 mt-1">
+                        Quotation #{proposal.proposal_number} / {proposal.delivery_mode} / {proposal.venue === 'client-site' ? 'Client Site' : 'VYSPER Institute Training Center'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 lg:justify-end">
+                      <Button size="sm" variant="outline" onClick={() => onReviewProposal(proposal.id)}>Review</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CalendarStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-muted rounded-lg p-4">
+      <p className="text-sm text-foreground/60">{label}</p>
+      <p className="text-3xl text-primary mt-1" style={{ fontWeight: 700 }}>{value}</p>
     </div>
   );
 }
